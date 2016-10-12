@@ -4,7 +4,6 @@ description: |-
   Export Xcode archive.
 
   Exports .ipa from iOS and tvOS .xcarchive.
-  Exports .app or .pkg from macOS .xcarchive.
 website: https://github.com/bitrise-steplib/steps-export-archive
 source_code_url: https://github.com/bitrise-steplib/steps-export-archive
 support_url: https://github.com/bitrise-steplib/steps-export-archive/issues
@@ -29,35 +28,22 @@ toolkit:
   go:
     package_name: github.com/bitrise-steplib/steps-export-archive
 inputs:
-  - ios_archive_path: 
+  - archive_path: $BITRISE_XCARCHIVE_PATH
     opts:
-      title: "iOS archive path"
-      summary: "iOS archive path"
+      title: iOS or tvOS archive path
+      summary: iOS or tvOS archive path
       description: |-
-        Path to the iOS archive (.xcarchive) which should be exported.
-  - tvos_archive_path: 
-    opts:
-      title: "tvOS archive path"
-      summary: "tvOS archive path"
-      description: |-
-        Path to the tvOS archive (.xcarchive) which should be exported.
-  - macos_archive_path: 
-    opts:
-      title: "macOS archive path"
-      summary: "macOS archive path"
-      description: |-
-        Path to the macOS archive (.xcarchive) which should be exported.
+        Path to the iOS or tvOS archive (.xcarchive) which should be exported.
+      is_required: true
   - export_method: "auto-detect"
     opts:
       title: "Select method for export"
       summary: ""
       description: |-
-        __Export option:__
-
         Describes how Xcode should export the archive.   
         
         If you select `auto-detect` step will figure out proper export method  
-        based on provisioning profile embedded into generated xcodearchive.
+        based on provisioning profile embedded into the generated xcode archive.
       value_options:
       - "auto-detect"
       - "app-store"
@@ -101,17 +87,6 @@ inputs:
         Format example:
 
         - `1MZX23ABCD4`
-  - export_format: "ipa"
-    opts:
-      title: Specify export format
-      description: |-
-        In case of iOS and tvOS archive export, you only can use ipa as export format.
-        In case of macOS you can choose from app or pkg.
-      value_options:
-      - "ipa"
-      - "app"
-      - "pkg" 
-      is_required: true   
   - custom_export_options_plist_content:
     opts:
       title: "Custom export options plist content"
@@ -130,21 +105,25 @@ inputs:
         If step doesn't find export method based on provisioning profile, development will be use.
 
         Call `xcodebuild -help` for available export options.
-
-  - use_deprecated_export: "no"
+  - use_legacy_export: "no"
     opts:
-      title: Use deprecated ipa export method?
+      title: Use legacy ipa export method?
       description: |-
-        If this input is set to `yes`, step will use deprecated ipa export method.
+        If this input is set to `yes`, step will use legacy ipa export method.
       value_options:
       - "yes"
       - "no"
       is_required: true
-  - deprecated_export_provisioning_profile_name:
+  - legacy_export_provisioning_profile_name:
     opts:
       title: Specify Provisioning Profile name to use by export
       description: |-
-        If this input is empty for iOS and tvOS archives the step will use the embedded provisining profile.
-        For macOS archives leaving this input empty means: let xcodebuild to grab one of the matching installed provisining profile.  
+        If this input is empty the step will use the embedded provisining profile.
 outputs:
+  - BITRISE_IPA_PATH:
+    opts:
+      title: The created iOS or tvOS .ipa file's path
+  - BITRISE_DSYM_PATH:
+    opts:
+      title: The created iOS or tvOS .dSYM file's path
 

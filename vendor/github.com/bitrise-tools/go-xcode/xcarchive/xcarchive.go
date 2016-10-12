@@ -12,6 +12,65 @@ import (
 	"github.com/bitrise-tools/go-xcode/provisioningprofile"
 )
 
+// CommandCallback ...
+type CommandCallback func(printableCommand string)
+
+// ExportFormat ...
+type ExportFormat string
+
+const (
+	// ExportFormatUnknown ...
+	ExportFormatUnknown ExportFormat = "unkown"
+	// ExportFormatIPA ...
+	ExportFormatIPA ExportFormat = "ipa"
+	// ExportFormatAPP ...
+	ExportFormatAPP ExportFormat = "app"
+	// ExportFormatPKG ...
+	ExportFormatPKG ExportFormat = "pkg"
+)
+
+// ParseExportFormat ...
+func ParseExportFormat(format string) (ExportFormat, error) {
+	switch format {
+	case "ipa":
+		return ExportFormatIPA, nil
+	case "app":
+		return ExportFormatAPP, nil
+	case "pkg":
+		return ExportFormatPKG, nil
+	default:
+		return ExportFormatUnknown, fmt.Errorf("Unknown export format (%s)", format)
+	}
+}
+
+// Ext ...
+func (exportFormat ExportFormat) Ext() string {
+	switch exportFormat {
+	case ExportFormatIPA:
+		return ".ipa"
+	case ExportFormatAPP:
+		return ".app"
+	case ExportFormatPKG:
+		return ".pkg"
+	default:
+		return ""
+	}
+}
+
+// String ...
+func (exportFormat ExportFormat) String() string {
+	switch exportFormat {
+	case ExportFormatIPA:
+		return "ipa"
+	case ExportFormatAPP:
+		return "app"
+	case ExportFormatPKG:
+		return "pkg"
+	default:
+		return ""
+	}
+}
+
 func embeddedMobileProvisionPth(archivePth string) (string, error) {
 	applicationPth := filepath.Join(archivePth, "/Products/Applications")
 	mobileProvisionPthPattern := filepath.Join(applicationPth, "*.app/embedded.mobileprovision")
@@ -23,6 +82,24 @@ func embeddedMobileProvisionPth(archivePth string) (string, error) {
 		return "", fmt.Errorf("no embedded.mobileprovision with pattern: %s", mobileProvisionPthPattern)
 	}
 	return mobileProvisionPths[0], nil
+}
+
+// EmbeddedProfileName ...
+func EmbeddedProfileName(archivePth string) (string, error) {
+	embeddedProfilePth, err := embeddedMobileProvisionPth(archivePth)
+	if err != nil {
+		return "", fmt.Errorf("failed to get embedded mobileprovision path, error: %s", err)
+	}
+
+	provProfile, err := provisioningprofile.NewFromFile(embeddedProfilePth)
+	if err != nil {
+		return "", fmt.Errorf("failed to collect embedded mobile provision, error: %s", err)
+	}
+	if provProfile.Name == nil {
+		return "", fmt.Errorf("Name not found in prov profile")
+	}
+
+	return *provProfile.Name, nil
 }
 
 // DefaultExportOptions ...
@@ -50,28 +127,6 @@ func DefaultExportOptions(archivePth string) (exportoptions.ExportOptions, error
 	options.TeamID = developerTeamID
 	return options, nil
 }
-
-// ExportDSYMs ...
-func ExportDSYMs(archivePth string) (string, []string, error) {
-	dsymsPattern := filepath.Join(archivePth, "dSYMs", "*.dSYM")
-	dsyms, err := filepath.Glob(dsymsPattern)
-	if err != nil {
-		return "", []string{}, fmt.Errorf("failed to find dSYM with pattern: %s, error: %s", dsymsPattern, err)
-	}
-	appDSYM := ""
-	frameworkDSYMs := []string{}
-	for _, dsym := range dsyms {
-		if strings.HasSuffix(dsym, "*.app.dSYM") {
-			appDSYM = dsym
-		} else {
-			frameworkDSYMs = append(frameworkDSYMs, dsym)
-		}
-	}
-	return appDSYM, frameworkDSYMs, nil
-}
-
-// CommandCallback ...
-type CommandCallback func(printableCommand string)
 
 // Export ...
 func Export(archivePth, exportOptionsPth string, exportFormat ExportFormat, callback CommandCallback) (string, error) {
@@ -110,80 +165,6 @@ func Export(archivePth, exportOptionsPth string, exportFormat ExportFormat, call
 	}
 
 	return matches[0], nil
-}
-
-// EmbeddedProfileName ...
-func EmbeddedProfileName(archivePth string) (string, error) {
-	embeddedProfilePth, err := embeddedMobileProvisionPth(archivePth)
-	if err != nil {
-		return "", fmt.Errorf("failed to get embedded mobileprovision path, error: %s", err)
-	}
-
-	provProfile, err := provisioningprofile.NewFromFile(embeddedProfilePth)
-	if err != nil {
-		return "", fmt.Errorf("failed to collect embedded mobile provision, error: %s", err)
-	}
-	if provProfile.Name == nil {
-		return "", fmt.Errorf("Name not found in prov profile")
-	}
-
-	return *provProfile.Name, nil
-}
-
-// ExportFormat ...
-type ExportFormat string
-
-const (
-	// ExportFormatUnkown ...
-	ExportFormatUnkown ExportFormat = "unkown"
-	// ExportFormatIPA ...
-	ExportFormatIPA ExportFormat = "ipa"
-	// ExportFormatAPP ...
-	ExportFormatAPP ExportFormat = "app"
-	// ExportFormatPKG ...
-	ExportFormatPKG ExportFormat = "pkg"
-)
-
-// ParseExportFormat ...
-func ParseExportFormat(format string) (ExportFormat, error) {
-	switch format {
-	case "ipa":
-		return ExportFormatIPA, nil
-	case "app":
-		return ExportFormatAPP, nil
-	case "pkg":
-		return ExportFormatPKG, nil
-	default:
-		return ExportFormatUnkown, fmt.Errorf("Unkown export format (%s)", format)
-	}
-}
-
-// Ext ...
-func (exportFormat ExportFormat) Ext() string {
-	switch exportFormat {
-	case ExportFormatIPA:
-		return ".ipa"
-	case ExportFormatAPP:
-		return ".app"
-	case ExportFormatPKG:
-		return ".pkg"
-	default:
-		return ""
-	}
-}
-
-// String ...
-func (exportFormat ExportFormat) String() string {
-	switch exportFormat {
-	case ExportFormatIPA:
-		return "ipa"
-	case ExportFormatAPP:
-		return "app"
-	case ExportFormatPKG:
-		return "pkg"
-	default:
-		return ""
-	}
 }
 
 // LegacyExport ...
@@ -225,4 +206,23 @@ func LegacyExport(archivePth, provisioningProfileName string, exportFormat Expor
 	}
 
 	return outputPth, nil
+}
+
+// ExportDSYMs ...
+func ExportDSYMs(archivePth string) (string, []string, error) {
+	dsymsPattern := filepath.Join(archivePth, "dSYMs", "*.dSYM")
+	dsyms, err := filepath.Glob(dsymsPattern)
+	if err != nil {
+		return "", []string{}, fmt.Errorf("failed to find dSYM with pattern: %s, error: %s", dsymsPattern, err)
+	}
+	appDSYM := ""
+	frameworkDSYMs := []string{}
+	for _, dsym := range dsyms {
+		if strings.HasSuffix(dsym, ".app.dSYM") {
+			appDSYM = dsym
+		} else {
+			frameworkDSYMs = append(frameworkDSYMs, dsym)
+		}
+	}
+	return appDSYM, frameworkDSYMs, nil
 }
