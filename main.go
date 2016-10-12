@@ -275,7 +275,7 @@ func main() {
 			}
 		}
 
-		output, err := xcarchive.Export(configs.ArchivePath, exportOptionsPth, xcarchive.ExportFormatIPA, callback)
+		output, err := xcarchive.Export(configs.ArchivePath, exportOptionsPth, callback)
 		if err != nil {
 			log.Error("Export failed, error: %s", err)
 			os.Exit(1)
