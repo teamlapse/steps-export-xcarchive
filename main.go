@@ -181,6 +181,7 @@ func main() {
 				os.Exit(1)
 			}
 
+			log.Detail("embedded profile name: %s", *provProfile.Name)
 			provisioningProfileName = *provProfile.Name
 		}
 

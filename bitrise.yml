@@ -47,12 +47,32 @@ workflows:
   test:
     steps:
     - path::./:
-        title: Step Test
-        run_if: true
+        title: Step Test - Export Options
+    - path::./:
+        title: Step Test - Custom Export Options
         inputs:
+        - custom_export_options_plist_content: |-
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+                <dict>
+                    <key>method</key>
+                    <string>development</string>
+                    <key>teamID</key>
+                    <string>72SA8V3WYL</string>
+                </dict>
+            </plist>
+    - path::./:
+        title: Step Test - Legacy Export
+        inputs: 
+        - use_legacy_export: "yes"
+    - path::./:
+        title: Step Test - Legacy Export with profile name
+        inputs: 
+        - use_legacy_export: "yes"
+        - legacy_export_provisioning_profile_name: "BitriseBot-Wildcard"
     - script:
         title: Output Test
-        run_if: true
         inputs:
         - content: |-
             echo "BITRISE_IPA_PATH: $BITRISE_IPA_PATH"
