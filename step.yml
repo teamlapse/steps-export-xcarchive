@@ -1,12 +1,12 @@
-title: "Export Xcode archive"
-summary: Export Xcode archive
+title: Export iOS and tvOS Xcode archive
+summary: Export iOS and tvOS Xcode archive
 description: |-
-  Export Xcode archive.
+  Export iOS and tvOS Xcode archive.
 
   Exports .ipa from iOS and tvOS .xcarchive.
-website: https://github.com/bitrise-steplib/steps-export-archive
-source_code_url: https://github.com/bitrise-steplib/steps-export-archive
-support_url: https://github.com/bitrise-steplib/steps-export-archive/issues
+website: https://github.com/bitrise-steplib/steps-export-xcarchive
+source_code_url: https://github.com/bitrise-steplib/steps-export-xcarchive
+support_url: https://github.com/bitrise-steplib/steps-export-xcarchive/issues
 host_os_tags:
   - osx-10.10
 project_type_tags:
@@ -26,7 +26,7 @@ deps:
     bin_name: go
 toolkit:
   go:
-    package_name: github.com/bitrise-steplib/steps-export-archive
+    package_name: github.com/bitrise-steplib/steps-export-xcarchive
 inputs:
   - archive_path: $BITRISE_XCARCHIVE_PATH
     opts:
