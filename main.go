@@ -51,16 +51,24 @@ func createConfigsModelFromEnvs() ConfigsModel {
 
 func (configs ConfigsModel) print() {
 	log.Info("Configs:")
+
 	log.Detail("- ArchivePath: %s", configs.ArchivePath)
 	log.Detail("- ExportMethod: %s", configs.ExportMethod)
 	log.Detail("- UploadBitcode: %s", configs.UploadBitcode)
 	log.Detail("- CompileBitcode: %s", configs.CompileBitcode)
 	log.Detail("- TeamID: %s", configs.TeamID)
+
+	log.Info("Experimental Configs:")
+
 	log.Detail("- CustomExportOptionsPlistContent:")
-	fmt.Println(configs.CustomExportOptionsPlistContent)
+	if configs.CustomExportOptionsPlistContent != "" {
+		fmt.Println(configs.CustomExportOptionsPlistContent)
+	}
 	log.Detail("- UseLegacyExport: %s", configs.UseLegacyExport)
 	log.Detail("- LegacyExportProvisioningProfileName: %s", configs.LegacyExportProvisioningProfileName)
-	fmt.Println()
+
+	log.Info("Other Configs:")
+
 	log.Detail("- DeployDir: %s", configs.DeployDir)
 }
 

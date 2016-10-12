@@ -5,6 +5,8 @@ app:
   envs:
   # define these in your .bitrise.secrets.yml
   - BITRISE_XCARCHIVE_PATH: $BITRISE_XCARCHIVE_PATH
+  - CUSTOM_EXPORT_OPTIONS_PLIST_CONTENT: $CUSTOM_EXPORT_OPTIONS_PLIST_CONTENT
+  - LEGACY_EXPORT_PROVISIONING_PROFILE_NAME: $LEGACY_EXPORT_PROVISIONING_PROFILE_NAME
 
   - SAMPLE_APP_URL: https://github.com/bitrise-io/sample-apps-xamarin-ios.git
   - BITRISE_PROJECT_PATH: CreditCardValidator.iOS.sln
@@ -43,6 +45,9 @@ workflows:
     - xamarin-user-management:
     - nuget-restore:
     - git::https://github.com/bitrise-steplib/steps-xamarin-archive.git@develop:
+        inputs:
+        - force_mdtool: "yes"
+        - project_type_whitelist: ios
 
   test:
     steps:
@@ -51,17 +56,7 @@ workflows:
     - path::./:
         title: Step Test - Custom Export Options
         inputs:
-        - custom_export_options_plist_content: |-
-            <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-            <plist version="1.0">
-                <dict>
-                    <key>method</key>
-                    <string>development</string>
-                    <key>teamID</key>
-                    <string>72SA8V3WYL</string>
-                </dict>
-            </plist>
+        - custom_export_options_plist_content: $CUSTOM_EXPORT_OPTIONS_PLIST_CONTENT
     - path::./:
         title: Step Test - Legacy Export
         inputs: 
@@ -70,7 +65,7 @@ workflows:
         title: Step Test - Legacy Export with profile name
         inputs: 
         - use_legacy_export: "yes"
-        - legacy_export_provisioning_profile_name: "BitriseBot-Wildcard"
+        - legacy_export_provisioning_profile_name: $LEGACY_EXPORT_PROVISIONING_PROFILE_NAME
     - script:
         title: Output Test
         inputs:
