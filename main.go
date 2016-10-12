@@ -12,6 +12,7 @@ import (
 	"github.com/bitrise-io/go-utils/log"
 	"github.com/bitrise-io/go-utils/pathutil"
 	"github.com/bitrise-tools/go-xcode/exportoptions"
+	"github.com/bitrise-tools/go-xcode/provisioningprofile"
 	"github.com/bitrise-tools/go-xcode/xcarchive"
 )
 
@@ -143,6 +144,7 @@ func main() {
 
 		os.Exit(1)
 	}
+	fmt.Println()
 
 	callback := func(printableCommand string) {
 		log.Done("$ %s", printableCommand)
@@ -162,13 +164,24 @@ func main() {
 		} else {
 			log.Detail("Using embedded provisioing profile")
 
-			profileName, err := xcarchive.EmbeddedProfileName(configs.ArchivePath)
+			embeddedProfilePth, err := xcarchive.EmbeddedMobileProvisionPth(configs.ArchivePath)
 			if err != nil {
-				log.Error("Failed to find embedded profile, error: %s", err)
+				log.Error("Failed to get embedded profile path, error: %s", err)
 				os.Exit(1)
 			}
 
-			provisioningProfileName = profileName
+			provProfile, err := provisioningprofile.NewFromFile(embeddedProfilePth)
+			if err != nil {
+				log.Error("Failed to create provisioning profile model, error: %s", err)
+				os.Exit(1)
+			}
+
+			if provProfile.Name == nil {
+				log.Error("Profile name empty")
+				os.Exit(1)
+			}
+
+			provisioningProfileName = *provProfile.Name
 		}
 
 		output, err := xcarchive.LegacyExport(configs.ArchivePath, provisioningProfileName, xcarchive.ExportFormatIPA, callback)
@@ -206,7 +219,23 @@ func main() {
 			if configs.ExportMethod == "auto-detect" {
 				log.Detail("creating default export options based on embedded profile")
 
-				options, err := xcarchive.DefaultExportOptions(configs.ArchivePath)
+				embeddedProfilePth, err := xcarchive.EmbeddedMobileProvisionPth(configs.ArchivePath)
+				if err != nil {
+					log.Error("Failed to get embedded profile path, error: %s", err)
+					os.Exit(1)
+				}
+
+				provProfile, err := provisioningprofile.NewFromFile(embeddedProfilePth)
+				if err != nil {
+					log.Error("Failed to create provisioning profile model, error: %s", err)
+					os.Exit(1)
+				}
+
+				if provProfile.Name != nil {
+					log.Detail("embedded profile name: %s", *provProfile.Name)
+				}
+
+				options, err := xcarchive.DefaultExportOptions(provProfile)
 				if err != nil {
 					log.Error("Failed to create default export options, error: %s", err)
 					os.Exit(1)
@@ -234,6 +263,9 @@ func main() {
 					exportOpts = options
 				}
 			}
+
+			log.Detail("generated export options content:")
+			fmt.Println(exportOpts.String())
 
 			var err error
 			exportOptionsPth, err = exportOpts.WriteToTmpFile()
