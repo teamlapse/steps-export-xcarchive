@@ -3,6 +3,8 @@ default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
 
 app:
   envs:
+  - RELEASE_VERSION: 0.9.0
+
   # define these in your .bitrise.secrets.yml
   - BITRISE_XCARCHIVE_PATH: $BITRISE_XCARCHIVE_PATH
   - CUSTOM_EXPORT_OPTIONS_PLIST_CONTENT: $CUSTOM_EXPORT_OPTIONS_PLIST_CONTENT
@@ -15,6 +17,8 @@ app:
 
 workflows:
   ci:
+    before_run:
+    - go-tests
     after_run: 
     - test
     steps:
@@ -44,7 +48,7 @@ workflows:
     - certificate-and-profile-installer:
     - xamarin-user-management:
     - nuget-restore:
-    - git::https://github.com/bitrise-steplib/steps-xamarin-archive.git@develop:
+    - xamarin-archive:
         inputs:
         - force_mdtool: "yes"
         - project_type_whitelist: ios
@@ -73,6 +77,102 @@ workflows:
             echo "BITRISE_IPA_PATH: $BITRISE_IPA_PATH"
             echo "BITRISE_DSYM_PATH: $BITRISE_DSYM_PATH"
 
+  go-tests:
+    before_run:
+    - _install-test-tools
+    steps:
+    - script:
+        title: Export go files to test
+        inputs:
+        - content: |-
+            #!/bin/bash
+            set -ex
+
+            no_vendor_paths="$(go list ./... | grep -v vendor)"
+            envman add --key GOLIST_WITHOUT_VENDOR --value "$no_vendor_paths"
+    - script:
+        title: Err check
+        inputs:
+        - content: |-
+            #!/bin/bash
+            set -ex
+
+            errcheck -asserts=true -blank=true $GOLIST_WITHOUT_VENDOR
+    - script:
+        title: Go lint
+        inputs:
+        - content: |-
+            #!/bin/bash
+            set -ex
+
+            while read -r line; do
+              echo "-> Linting: $line"
+              golint_out="$(golint $line)"
+              if [[ "${golint_out}" != "" ]] ; then
+                echo "=> Golint issues found:"
+                echo "${golint_out}"
+                exit 1
+              fi
+            done <<< "$GOLIST_WITHOUT_VENDOR"
+    - script:
+        title: Go test
+        inputs:
+        - content: |-
+            #!/bin/bash
+            set -ex
+
+            go test ./...
+
+  _install-test-tools:
+    steps:
+    - script:
+        title: Install required testing tools
+        inputs:
+        - content: |-
+            #!/bin/bash
+            set -ex
+
+            # Check for unhandled errors
+            go get -u -v github.com/kisielk/errcheck
+
+            # Go lint
+            go get -u -v github.com/golang/lint/golint
+
+  # ----------------------------------------------------------------
+  # --- Utility workflows
+  godeps-update:
+    title: Godeps update
+    description: |
+      Used for updating bitrise dependencies with godep
+    steps:
+    - script:
+        title: Dependency update
+        inputs:
+        - content: |
+            #!/bin/bash
+            set -ex
+            go get -u -v github.com/tools/godep
+
+            rm -rf ./Godeps
+            rm -rf ./vendor
+
+            go get -t -d ./...
+            godep save ./...
+
+  # ----------------------------------------------------------------
+  # --- workflow to create Release version
+  create-release:
+    steps:
+    - script:
+        title:
+        inputs:
+        - content: |
+            #!/bin/bash
+            set -ex
+            go get -u github.com/bitrise-tools/releaseman
+            export CI=true
+            releaseman create --version "$RELEASE_VERSION"
+
   # ----------------------------------------------------------------
   # --- workflows to Share this step into a Step Library
   audit-this-step:
@@ -87,10 +187,10 @@ workflows:
   share-this-step:
     envs:
       # if you want to share this step into a StepLib
-      - MY_STEPLIB_REPO_FORK_GIT_URL:
-      - STEP_ID_IN_STEPLIB:
-      - STEP_GIT_VERION_TAG_TO_SHARE:
-      - STEP_GIT_CLONE_URL:
+      - MY_STEPLIB_REPO_FORK_GIT_URL: $MY_STEPLIB_REPO_FORK_GIT_URL
+      - STEP_ID_IN_STEPLIB: export-xcarchive
+      - STEP_GIT_VERION_TAG_TO_SHARE: $RELEASE_VERSION
+      - STEP_GIT_CLONE_URL: https://github.com/bitrise-steplib/steps-export-xcarchive.git
     description: |-
       If this is the first time you try to share a Step you should
       first call: $ bitrise share
@@ -123,24 +223,3 @@ workflows:
             bitrise share start -c ${MY_STEPLIB_REPO_FORK_GIT_URL}
             bitrise share create --stepid ${STEP_ID_IN_STEPLIB} --tag ${STEP_GIT_VERION_TAG_TO_SHARE} --git ${STEP_GIT_CLONE_URL}
             bitrise share finish
-
-  # ----------------------------------------------------------------
-  # --- Utility workflows
-  godeps-update:
-    title: Godeps update
-    description: |
-      Used for updating bitrise dependencies with godep
-    steps:
-    - script:
-        title: Dependency update
-        inputs:
-        - content: |
-            #!/bin/bash
-            set -ex
-            go get -u -v github.com/tools/godep
-
-            rm -rf ./Godeps
-            rm -rf ./vendor
-
-            go get -t -d ./...
-            godep save ./...
