@@ -118,12 +118,18 @@ inputs:
     opts:
       title: Specify Provisioning Profile name to use by export
       description: |-
+        This input will be used if `use_legacy_export` is set to `"yes"`.
+
         If this input is empty the step will use the embedded provisining profile.
 outputs:
   - BITRISE_IPA_PATH:
     opts:
-      title: The created iOS or tvOS .ipa file's path
+      title: The created iOS or tvOS .ipa file's path.
   - BITRISE_DSYM_PATH:
     opts:
-      title: The created iOS or tvOS .dSYM file's path
-
+      title: The created iOS or tvOS .dSYM zip file's path.
+      description: |-
+        Step will collect every dsym (app dsym and framwork dsyms) in a directory, zip it and export the zipped directory path.
+  - BITRISE_IDEDISTRIBUTION_LOGS_PATH:
+    opts:
+      title: Path to the xcdistributionlogs zip

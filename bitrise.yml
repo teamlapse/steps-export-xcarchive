@@ -57,14 +57,38 @@ workflows:
     steps:
     - path::./:
         title: Step Test - Export Options
+    - script:
+        title: Output Test
+        inputs:
+        - content: |-
+            echo "BITRISE_IPA_PATH: $BITRISE_IPA_PATH"
+            echo "BITRISE_DSYM_PATH: $BITRISE_DSYM_PATH"
+            rm "$BITRISE_IPA_PATH"
+            rm "$BITRISE_DSYM_PATH"
     - path::./:
         title: Step Test - Custom Export Options
         inputs:
         - custom_export_options_plist_content: $CUSTOM_EXPORT_OPTIONS_PLIST_CONTENT
+    - script:
+        title: Output Test
+        inputs:
+        - content: |-
+            echo "BITRISE_IPA_PATH: $BITRISE_IPA_PATH"
+            echo "BITRISE_DSYM_PATH: $BITRISE_DSYM_PATH"
+            rm "$BITRISE_IPA_PATH"
+            rm "$BITRISE_DSYM_PATH"
     - path::./:
         title: Step Test - Legacy Export
         inputs: 
         - use_legacy_export: "yes"
+    - script:
+        title: Output Test
+        inputs:
+        - content: |-
+            echo "BITRISE_IPA_PATH: $BITRISE_IPA_PATH"
+            echo "BITRISE_DSYM_PATH: $BITRISE_DSYM_PATH"
+            rm "$BITRISE_IPA_PATH"
+            rm "$BITRISE_DSYM_PATH"
     - path::./:
         title: Step Test - Legacy Export with profile name
         inputs: 
@@ -76,6 +100,8 @@ workflows:
         - content: |-
             echo "BITRISE_IPA_PATH: $BITRISE_IPA_PATH"
             echo "BITRISE_DSYM_PATH: $BITRISE_DSYM_PATH"
+            rm "$BITRISE_IPA_PATH"
+            rm "$BITRISE_DSYM_PATH"
 
   go-tests:
     before_run:

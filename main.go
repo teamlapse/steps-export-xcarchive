@@ -1,19 +1,29 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/bitrise-io/go-utils/cmdex"
 	"github.com/bitrise-io/go-utils/fileutil"
 	"github.com/bitrise-io/go-utils/log"
 	"github.com/bitrise-io/go-utils/pathutil"
+	"github.com/bitrise-steplib/steps-export-xcarchive/utils"
 	"github.com/bitrise-tools/go-xcode/exportoptions"
 	"github.com/bitrise-tools/go-xcode/provisioningprofile"
 	"github.com/bitrise-tools/go-xcode/xcarchive"
+	"github.com/bitrise-tools/go-xcode/xcodebuild"
+)
+
+const (
+	bitriseIPAPthEnvKey                 = "BITRISE_IPA_PATH"
+	bitriseDSYMPthEnvKey                = "BITRISE_DSYM_PATH"
+	bitriseIDEDistributionLogsPthEnvKey = "BITRISE_IDEDISTRIBUTION_LOGS_PATH"
 )
 
 // ConfigsModel ...
@@ -51,7 +61,6 @@ func createConfigsModelFromEnvs() ConfigsModel {
 
 func (configs ConfigsModel) print() {
 	log.Info("Configs:")
-
 	log.Detail("- ArchivePath: %s", configs.ArchivePath)
 	log.Detail("- ExportMethod: %s", configs.ExportMethod)
 	log.Detail("- UploadBitcode: %s", configs.UploadBitcode)
@@ -59,16 +68,14 @@ func (configs ConfigsModel) print() {
 	log.Detail("- TeamID: %s", configs.TeamID)
 
 	log.Info("Experimental Configs:")
-
+	log.Detail("- UseLegacyExport: %s", configs.UseLegacyExport)
+	log.Detail("- LegacyExportProvisioningProfileName: %s", configs.LegacyExportProvisioningProfileName)
 	log.Detail("- CustomExportOptionsPlistContent:")
 	if configs.CustomExportOptionsPlistContent != "" {
 		fmt.Println(configs.CustomExportOptionsPlistContent)
 	}
-	log.Detail("- UseLegacyExport: %s", configs.UseLegacyExport)
-	log.Detail("- LegacyExportProvisioningProfileName: %s", configs.LegacyExportProvisioningProfileName)
 
 	log.Info("Other Configs:")
-
 	log.Detail("- DeployDir: %s", configs.DeployDir)
 }
 
@@ -100,43 +107,58 @@ func (configs ConfigsModel) validate() error {
 	return nil
 }
 
-func exportEnvironmentWithEnvman(keyStr, valueStr string) error {
-	cmd := cmdex.NewCommand("envman", "add", "--key", keyStr)
-	cmd.SetStdin(strings.NewReader(valueStr))
-	return cmd.Run()
+func fail(format string, v ...interface{}) {
+	log.Error(format, v...)
+	os.Exit(1)
 }
 
-func exportZipedArtifactDir(pth, deployDir, envKey string) (string, error) {
-	parentDir := filepath.Dir(pth)
-	dirName := filepath.Base(pth)
-	deployPth := filepath.Join(deployDir, dirName+".zip")
-	cmd := cmdex.NewCommand("/usr/bin/zip", "-rTy", deployPth, dirName)
-	cmd.SetDir(parentDir)
+func isToolInstalled(name string) bool {
+	cmd := cmdex.NewCommand("which", name)
 	out, err := cmd.RunAndReturnTrimmedCombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("Failed to zip dir: %s, output: %s, error: %s", pth, out, err)
-	}
-
-	if err := exportEnvironmentWithEnvman(envKey, deployPth); err != nil {
-		return "", fmt.Errorf("Failed to export artifact path (%s) into (%s)", deployPth, envKey)
-	}
-
-	return deployPth, nil
+	return err == nil && out != ""
 }
 
-func exportArtifactFile(pth, deployDir, envKey string) (string, error) {
-	base := filepath.Base(pth)
-	deployPth := filepath.Join(deployDir, base)
+func applyRVMFix() error {
+	if !isToolInstalled("rvm") {
+		return nil
+	}
+	log.Warn(`Applying RVM 'fix'`)
 
-	if err := cmdex.CopyFile(pth, deployPth); err != nil {
-		return "", fmt.Errorf("Failed to move artifact (%s) to (%s)", pth, deployPth)
+	homeDir := pathutil.UserHomeDir()
+	rvmScriptPth := filepath.Join(homeDir, ".rvm/scripts/rvm")
+	if exist, err := pathutil.IsPathExists(rvmScriptPth); err != nil {
+		return err
+	} else if !exist {
+		return nil
 	}
 
-	if err := exportEnvironmentWithEnvman(envKey, deployPth); err != nil {
-		return "", fmt.Errorf("Failed to export artifact path (%s) into (%s)", deployPth, envKey)
+	if err := cmdex.NewCommand("source", rvmScriptPth).Run(); err != nil {
+		return err
 	}
 
-	return deployPth, nil
+	if err := cmdex.NewCommand("rvm", "use", "system").Run(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func findIDEDistrubutionLogsPath(output string) (string, error) {
+	pattern := `IDEDistribution: -\[IDEDistributionLogging _createLoggingBundleAtPath:\]: Created bundle at path '(?P<log_path>.*)'`
+	re := regexp.MustCompile(pattern)
+
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if match := re.FindStringSubmatch(line); len(match) == 2 {
+			return match[1], nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+
+	return "", nil
 }
 
 func main() {
@@ -146,20 +168,26 @@ func main() {
 	configs.print()
 
 	if err := configs.validate(); err != nil {
-		fmt.Println()
-		log.Error("Issue with input: %s", err)
-		fmt.Println()
-
-		os.Exit(1)
+		fail("Issue with input: %s", err)
 	}
 	fmt.Println()
 
-	callback := func(printableCommand string) {
-		log.Done("$ %s", printableCommand)
-		fmt.Println()
-	}
+	archiveExt := filepath.Ext(configs.ArchivePath)
+	archiveName := filepath.Base(configs.ArchivePath)
+	archiveName = strings.TrimSuffix(archiveName, archiveExt)
 
-	ipaPth := ""
+	ipaPath := filepath.Join(configs.DeployDir, archiveName+".ipa")
+	exportOptionsPath := filepath.Join(configs.DeployDir, "export_options.plist")
+
+	dsymZipPath := filepath.Join(configs.DeployDir, archiveName+".dSYM.zip")
+	ideDistributionLogsZipPath := filepath.Join(configs.DeployDir, "xcodebuild.xcdistributionlogs.zip")
+
+	envsToUnset := []string{"GEM_HOME", "GEM_PATH", "RUBYLIB", "RUBYOPT", "BUNDLE_BIN_PATH", "_ORIGINAL_GEM_PATH", "BUNDLE_GEMFILE"}
+	for _, key := range envsToUnset {
+		if err := os.Unsetenv(key); err != nil {
+			fail("Failed to unset (%s), error: %s", key, err)
+		}
+	}
 
 	if configs.UseLegacyExport == "yes" {
 		log.Info("Using legacy export method...")
@@ -174,148 +202,176 @@ func main() {
 
 			embeddedProfilePth, err := xcarchive.EmbeddedMobileProvisionPth(configs.ArchivePath)
 			if err != nil {
-				log.Error("Failed to get embedded profile path, error: %s", err)
-				os.Exit(1)
+				fail("Failed to get embedded profile path, error: %s", err)
 			}
 
 			provProfile, err := provisioningprofile.NewFromFile(embeddedProfilePth)
 			if err != nil {
-				log.Error("Failed to create provisioning profile model, error: %s", err)
-				os.Exit(1)
+				fail("Failed to create provisioning profile model, error: %s", err)
 			}
 
 			if provProfile.Name == nil {
-				log.Error("Profile name empty")
-				os.Exit(1)
+				fail("Profile name empty")
 			}
 
 			log.Detail("embedded profile name: %s", *provProfile.Name)
 			provisioningProfileName = *provProfile.Name
 		}
 
-		output, err := xcarchive.LegacyExport(configs.ArchivePath, provisioningProfileName, xcarchive.ExportFormatIPA, callback)
-		if err != nil {
-			log.Error("Export failed, error: %s", err)
-			os.Exit(1)
-		}
+		legacyExportCmd := xcodebuild.NewLegacyExportCommand()
+		legacyExportCmd.SetExportFormat("ipa")
+		legacyExportCmd.SetArchivePath(configs.ArchivePath)
+		legacyExportCmd.SetExportPath(ipaPath)
+		legacyExportCmd.SetExportProvisioningProfileName(provisioningProfileName)
 
-		ipaPth = output
+		log.Done("$ %s", legacyExportCmd.PrintableCmd())
+		fmt.Println()
+
+		if err := legacyExportCmd.Run(); err != nil {
+			fail("Export failed, error: %s", err)
+		}
 	} else {
 		log.Info("Exporting with export options...")
 
-		exportOptionsPth := ""
+		/*
+		   Because of an RVM issue which conflicts with `xcodebuild`'s new
+		   `-exportOptionsPlist` option
+		   link: https://github.com/bitrise-io/steps-xcode-archive/issues/13
+		*/
+		if err := applyRVMFix(); err != nil {
+			fail("rvm fix failed, error: %s", err)
+		}
 
 		if configs.CustomExportOptionsPlistContent != "" {
 			log.Detail("Custom export options content provided:")
 			fmt.Println(configs.CustomExportOptionsPlistContent)
 
-			tmpDir, err := pathutil.NormalizedOSTempDirPath("export")
-			if err != nil {
-				log.Error("Failed to create tmp dir, error: %s", err)
-				os.Exit(1)
-			}
-			exportOptionsPth = filepath.Join(tmpDir, "export-options.plist")
-
-			if err := fileutil.WriteStringToFile(exportOptionsPth, configs.CustomExportOptionsPlistContent); err != nil {
-				log.Error("Failed to write export options to file, error: %s", err)
-				os.Exit(1)
+			if err := fileutil.WriteStringToFile(exportOptionsPath, configs.CustomExportOptionsPlistContent); err != nil {
+				fail("Failed to write export options to file, error: %s", err)
 			}
 		} else {
 			log.Detail("Generating export options")
 
-			var exportOpts exportoptions.ExportOptions
-
+			var method exportoptions.Method
 			if configs.ExportMethod == "auto-detect" {
 				log.Detail("creating default export options based on embedded profile")
 
 				embeddedProfilePth, err := xcarchive.EmbeddedMobileProvisionPth(configs.ArchivePath)
 				if err != nil {
-					log.Error("Failed to get embedded profile path, error: %s", err)
-					os.Exit(1)
+					fail("Failed to get embedded profile path, error: %s", err)
 				}
 
 				provProfile, err := provisioningprofile.NewFromFile(embeddedProfilePth)
 				if err != nil {
-					log.Error("Failed to create provisioning profile model, error: %s", err)
-					os.Exit(1)
+					fail("Failed to create provisioning profile model, error: %s", err)
 				}
 
-				if provProfile.Name != nil {
-					log.Detail("embedded profile name: %s", *provProfile.Name)
-				}
-
-				options, err := xcarchive.DefaultExportOptions(provProfile)
+				method = provProfile.GetExportMethod()
+				log.Detail("detected export method: %s", method)
+			} else {
+				parsedMethod, err := exportoptions.ParseMethod(configs.ExportMethod)
 				if err != nil {
-					log.Error("Failed to create default export options, error: %s", err)
-					os.Exit(1)
+					fail("Failed to parse export options, error: %s", err)
 				}
+				method = parsedMethod
+			}
+
+			var exportOpts exportoptions.ExportOptions
+			if method == exportoptions.MethodAppStore {
+				options := exportoptions.NewAppStoreOptions()
+				options.UploadBitcode = (configs.UploadBitcode == "yes")
+				options.TeamID = configs.TeamID
 
 				exportOpts = options
 			} else {
-				method, err := exportoptions.ParseMethod(configs.ExportMethod)
-				if err != nil {
-					log.Error("Failed to parse export options, error: %s", err)
-					os.Exit(1)
-				}
+				options := exportoptions.NewNonAppStoreOptions(method)
+				options.CompileBitcode = (configs.CompileBitcode == "yes")
+				options.TeamID = configs.TeamID
 
-				if method == exportoptions.MethodAppStore {
-					options := exportoptions.NewAppStoreOptions()
-					options.UploadBitcode = (configs.UploadBitcode == "yes")
-					options.TeamID = configs.TeamID
-
-					exportOpts = options
-				} else {
-					options := exportoptions.NewNonAppStoreOptions(method)
-					options.CompileBitcode = (configs.CompileBitcode == "yes")
-					options.TeamID = configs.TeamID
-
-					exportOpts = options
-				}
+				exportOpts = options
 			}
 
 			log.Detail("generated export options content:")
+			fmt.Println()
 			fmt.Println(exportOpts.String())
 
-			var err error
-			exportOptionsPth, err = exportOpts.WriteToTmpFile()
-			if err != nil {
-				log.Error("Failed to write export options to file, error: %s", err)
-				os.Exit(1)
+			if err := exportOpts.WriteToFile(exportOptionsPath); err != nil {
+				fail("Failed to write export options to file, error: %s", err)
 			}
 		}
 
-		output, err := xcarchive.Export(configs.ArchivePath, exportOptionsPth, callback)
+		fmt.Println()
+
+		tmpDir, err := pathutil.NormalizedOSTempDirPath("__export__")
 		if err != nil {
-			log.Error("Export failed, error: %s", err)
-			os.Exit(1)
+			fail("Failed to create tmp dir, error: %s", err)
 		}
 
-		ipaPth = output
-	}
+		exportCmd := xcodebuild.NewExportCommand()
+		exportCmd.SetArchivePath(configs.ArchivePath)
+		exportCmd.SetExportDir(tmpDir)
+		exportCmd.SetExportOptionsPlist(exportOptionsPath)
 
-	{
-		envKey := "BITRISE_IPA_PATH"
-		pth, err := exportArtifactFile(ipaPth, configs.DeployDir, envKey)
-		if err != nil {
-			log.Error("Failed to export ipa, error: %s", err)
-			os.Exit(1)
+		log.Done("$ %s", exportCmd.PrintableCmd())
+		fmt.Println()
+
+		if xcodebuildOut, err := exportCmd.RunAndReturnOutput(); err != nil {
+			// xcdistributionlogs
+			if logsDirPth, err := findIDEDistrubutionLogsPath(xcodebuildOut); err != nil {
+				log.Warn("Failed to find xcdistributionlogs, error: %s", err)
+			} else if err := utils.ExportOutputDirAsZip(logsDirPth, ideDistributionLogsZipPath, bitriseIDEDistributionLogsPthEnvKey); err != nil {
+				log.Warn("Failed to export %s, error: %s", bitriseIDEDistributionLogsPthEnvKey, err)
+			} else {
+				log.Warn(`If you can't find the reason of the error in the log, please check the xcdistributionlogs
+The logs directory is stored in $BITRISE_DEPLOY_DIR, and its full path
+is available in the $BITRISE_IDEDISTRIBUTION_LOGS_PATH environment variable`)
+			}
+
+			fail("Export failed, error: %s", err)
 		}
-		log.Done("ipa path (%s) is available in (%s) environment variable", pth, envKey)
+
+		// Search for ipa
+		pattern := filepath.Join(tmpDir, "*.ipa")
+		ipas, err := filepath.Glob(pattern)
+		if err != nil {
+			fail("Failed to collect ipa files, error: %s", err)
+		}
+
+		if len(ipas) == 0 {
+			fail("No ipa found with pattern: %s", pattern)
+		} else if len(ipas) == 1 {
+			if err := cmdex.CopyFile(ipas[0], ipaPath); err != nil {
+				fail("Failed to copy (%s) -> (%s), error: %s", ipas[0], ipaPath, err)
+			}
+		} else {
+			log.Warn("More than 1 .ipa file found")
+
+			for _, ipa := range ipas {
+				base := filepath.Base(ipa)
+				deployPth := filepath.Join(configs.DeployDir, base)
+
+				if err := cmdex.CopyFile(ipa, deployPth); err != nil {
+					fail("Failed to copy (%s) -> (%s), error: %s", ipas[0], ipaPath, err)
+				}
+				ipaPath = ipa
+			}
+		}
 	}
 
-	appDSYM, _, err := xcarchive.ExportDSYMs(configs.ArchivePath)
+	if err := utils.ExportOutputFile(ipaPath, ipaPath, bitriseIPAPthEnvKey); err != nil {
+		fail("Failed to export %s, error: %s", bitriseIPAPthEnvKey, err)
+	}
+
+	log.Done("The ipa path is now available in the Environment Variable: %s (value: %s)", bitriseIPAPthEnvKey, ipaPath)
+
+	appDSYM, _, err := xcarchive.FindDSYMs(configs.ArchivePath)
 	if err != nil {
-		log.Error("Failed to export dsym, error: %s", err)
-		os.Exit(1)
+		fail("Failed to export dsym, error: %s", err)
 	}
 
-	{
-		envKey := "BITRISE_DSYM_PATH"
-		pth, err := exportZipedArtifactDir(appDSYM, configs.DeployDir, envKey)
-		if err != nil {
-			log.Error("Failed to export dsym, error: %s", err)
-			os.Exit(1)
-		}
-		log.Done("dsym path (%s) is available in (%s) environment variable", pth, envKey)
+	if err := utils.ExportOutputDirAsZip(appDSYM, dsymZipPath, bitriseDSYMPthEnvKey); err != nil {
+		fail("Failed to export %s, error: %s", bitriseDSYMPthEnvKey, err)
 	}
+
+	log.Done("The dSYM zip path is now available in the Environment Variable: %s (value: %s)", bitriseDSYMPthEnvKey, dsymZipPath)
 }
