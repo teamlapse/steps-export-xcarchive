@@ -112,37 +112,6 @@ func fail(format string, v ...interface{}) {
 	os.Exit(1)
 }
 
-func isToolInstalled(name string) bool {
-	cmd := cmdex.NewCommand("which", name)
-	out, err := cmd.RunAndReturnTrimmedCombinedOutput()
-	return err == nil && out != ""
-}
-
-func applyRVMFix() error {
-	if !isToolInstalled("rvm") {
-		return nil
-	}
-	log.Warn(`Applying RVM 'fix'`)
-
-	homeDir := pathutil.UserHomeDir()
-	rvmScriptPth := filepath.Join(homeDir, ".rvm/scripts/rvm")
-	if exist, err := pathutil.IsPathExists(rvmScriptPth); err != nil {
-		return err
-	} else if !exist {
-		return nil
-	}
-
-	if err := cmdex.NewCommand("source", rvmScriptPth).Run(); err != nil {
-		return err
-	}
-
-	if err := cmdex.NewCommand("rvm", "use", "system").Run(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func findIDEDistrubutionLogsPath(output string) (string, error) {
 	pattern := `IDEDistribution: -\[IDEDistributionLogging _createLoggingBundleAtPath:\]: Created bundle at path '(?P<log_path>.*)'`
 	re := regexp.MustCompile(pattern)
@@ -232,15 +201,6 @@ func main() {
 		}
 	} else {
 		log.Info("Exporting with export options...")
-
-		/*
-		   Because of an RVM issue which conflicts with `xcodebuild`'s new
-		   `-exportOptionsPlist` option
-		   link: https://github.com/bitrise-io/steps-xcode-archive/issues/13
-		*/
-		if err := applyRVMFix(); err != nil {
-			fail("rvm fix failed, error: %s", err)
-		}
 
 		if configs.CustomExportOptionsPlistContent != "" {
 			log.Detail("Custom export options content provided:")
