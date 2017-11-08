@@ -1,99 +1,167 @@
-format_version: 1.3.1
+format_version: 4
 default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
 
 app:
   envs:
   - RELEASE_VERSION: 0.9.2
-
-  # define these in your .bitrise.secrets.yml
-  - BITRISE_XCARCHIVE_PATH: $BITRISE_XCARCHIVE_PATH
-  - CUSTOM_EXPORT_OPTIONS_PLIST_CONTENT: $CUSTOM_EXPORT_OPTIONS_PLIST_CONTENT
-  - LEGACY_EXPORT_PROVISIONING_PROFILE_NAME: $LEGACY_EXPORT_PROVISIONING_PROFILE_NAME
-
-  - SAMPLE_APP_URL: https://github.com/bitrise-samples/sample-apps-xamarin-cross-platform.git
-  - BITRISE_PROJECT_PATH: Multiplatform.sln
-  - BITRISE_XAMARIN_CONFIGURATION: Release
-  - BITRISE_XAMARIN_PLATFORM: iPhone
+  - ORIG_BITRISE_SOURCE_DIR: $BITRISE_SOURCE_DIR
 
 workflows:
-  ci:
+  # ----------------------------------------------------------------
+  # --- Workflows for testing
+  test:
     before_run:
     - go-tests
-    after_run: 
-    - test
+    after_run:
+    - test_xamarin
+    - test_xcode
+
+  test_legacy:
+    before_run:
+    - go-tests
+    after_run:
+    - test_xcode_7
+
+  test_xamarin:
+    envs:
+    - SAMPLE_APP_URL: https://github.com/bitrise-samples/sample-apps-xamarin-cross-platform.git
+    - BRANCH: master
+    - BITRISE_PROJECT_PATH: Multiplatform.sln
+    - BITRISE_XAMARIN_CONFIGURATION: Release
+    - BITRISE_XAMARIN_PLATFORM: iPhone
+    - LEGACY: "no"
+    before_run: 
+    - _common_prepare
+    after_run:
+    - _common_test
+    steps:
+    - git-clone:
+        run_if: true
+        inputs:
+        - repository_url: $SAMPLE_APP_URL
+        - clone_into_dir: "$ORIG_BITRISE_SOURCE_DIR/_tmp"
+        - commit: ""
+        - tag: ""
+        - branch: $BRANCH
+        - pull_request_id: ""
+        - clone_depth: ""
+    - nuget-restore:
+        inputs:
+        - nuget_version: ""
+    - xamarin-archive:
+        inputs:
+        - project_type_whitelist: ios
+    - script:
+        title: ""
+        inputs:
+        - content: rm "$BITRISE_IPA_PATH"
+
+  test_xcode:
+    envs:
+    - SAMPLE_APP_URL: https://github.com/bitrise-samples/sample-apps-ios-multi-target.git
+    - BRANCH: entitlements
+    - BITRISE_PROJECT_PATH: code-sign-test.xcodeproj
+    - BITRISE_SCHEME: code-sign-test
+    - LEGACY: "no"
+    - PLIST: |-
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+            <dict>
+                <key>method</key>
+                <string>development</string>
+                <key>provisioningProfiles</key>
+                <dict>
+                    <key>com.bitrise.code-sign-test</key>
+                    <string>iOS Team Provisioning Profile: com.bitrise.code-sign-test</string>
+                    <key>com.bitrise.code-sign-test.share-extension</key>
+                    <string>iOS Team Provisioning Profile: com.bitrise.code-sign-test.share-extension</string>
+                    <key>com.bitrise.code-sign-test.watchkitapp</key>
+                    <string>iOS Team Provisioning Profile: com.bitrise.code-sign-test.watchkitapp</string>
+                    <key>com.bitrise.code-sign-test.watchkitapp.watchkitextension</key>
+                    <string>iOS Team Provisioning Profile: com.bitrise.code-sign-test.watchkitapp.watchkitextension</string>
+                </dict>
+                <key>signingCertificate</key>
+                <string>iPhone Developer</string>
+            </dict>
+        </plist>
+    before_run: 
+    - _common_prepare
+    after_run:
+    - _common_test
+    steps:
+    - git-clone:
+        run_if: true
+        inputs:
+        - repository_url: $SAMPLE_APP_URL
+        - clone_into_dir: "$ORIG_BITRISE_SOURCE_DIR/_tmp"
+        - commit: ""
+        - tag: ""
+        - branch: $BRANCH
+        - pull_request_id: ""
+        - clone_depth: ""
+    - xcode-archive:
+        inputs:
+        - output_tool: xcodebuild
+    - script:
+        title: ""
+        inputs:
+        - content: rm "$BITRISE_IPA_PATH"
+
+  test_xcode_7:
+    envs:
+    - SAMPLE_APP_URL: https://github.com/bitrise-io/sample-apps-ios-simple-objc.git
+    - BRANCH: master
+    - BITRISE_PROJECT_PATH: ios-simple-objc/ios-simple-objc.xcodeproj
+    - BITRISE_SCHEME: ios-simple-objc
+    - LEGACY: "yes"
+    before_run: 
+    - _common_prepare
+    after_run:
+    - _common_test
+    steps:
+    - git-clone:
+        run_if: true
+        inputs:
+        - repository_url: $SAMPLE_APP_URL
+        - clone_into_dir: "$ORIG_BITRISE_SOURCE_DIR/_tmp"
+        - commit: ""
+        - tag: ""
+        - branch: $BRANCH
+        - pull_request_id: ""
+        - clone_depth: ""
+    - xcode-archive:
+        inputs:
+        - output_tool: xcodebuild
+    - script:
+        title: ""
+        inputs:
+        - content: rm "$BITRISE_IPA_PATH"
+
+  _common_prepare:
     steps:
     - script:
         inputs:
         - content: |-
             #!/bin/bash
-            set -e
-            set -v
-            rm -rf ./_tmp
+            set -ex
+            rm -rf "$ORIG_BITRISE_SOURCE_DIR/_tmp"
+            mkdir -p "$ORIG_BITRISE_SOURCE_DIR/_tmp"
     - change-workdir:
-        title: Switch working dir to test / _tmp dir
+        title: Switch working dir to _tmp dir
         run_if: true
         inputs:
-        - path: ./_tmp
+        - path: "$ORIG_BITRISE_SOURCE_DIR/_tmp"
         - is_create_path: true
-    - git-clone:
-        run_if: true
-        inputs:
-        - repository_url: $SAMPLE_APP_URL
-        - clone_into_dir: ./
-        - commit: ""
-        - tag: ""
-        - branch: "master"
-        - pull_request_id: ""
-        - clone_depth: ""
     - certificate-and-profile-installer:
-    - xamarin-user-management:
-    - nuget-restore:
-    - xamarin-archive:
-        inputs:
-        - force_mdtool: "yes"
-        - project_type_whitelist: ios
 
-  test:
+  _common_test:
     steps:
     - path::./:
         title: Step Test - Export Options
-    - script:
-        title: Output Test
         inputs:
-        - content: |-
-            echo "BITRISE_IPA_PATH: $BITRISE_IPA_PATH"
-            echo "BITRISE_DSYM_PATH: $BITRISE_DSYM_PATH"
-            rm "$BITRISE_IPA_PATH"
-            rm "$BITRISE_DSYM_PATH"
-    - path::./:
-        title: Step Test - Custom Export Options
-        inputs:
-        - custom_export_options_plist_content: $CUSTOM_EXPORT_OPTIONS_PLIST_CONTENT
-    - script:
-        title: Output Test
-        inputs:
-        - content: |-
-            echo "BITRISE_IPA_PATH: $BITRISE_IPA_PATH"
-            echo "BITRISE_DSYM_PATH: $BITRISE_DSYM_PATH"
-            rm "$BITRISE_IPA_PATH"
-            rm "$BITRISE_DSYM_PATH"
-    - path::./:
-        title: Step Test - Legacy Export
-        inputs: 
-        - use_legacy_export: "yes"
-    - script:
-        title: Output Test
-        inputs:
-        - content: |-
-            echo "BITRISE_IPA_PATH: $BITRISE_IPA_PATH"
-            echo "BITRISE_DSYM_PATH: $BITRISE_DSYM_PATH"
-            rm "$BITRISE_IPA_PATH"
-            rm "$BITRISE_DSYM_PATH"
-    - path::./:
-        title: Step Test - Legacy Export with profile name
-        inputs: 
-        - use_legacy_export: "yes"
-        - legacy_export_provisioning_profile_name: $LEGACY_EXPORT_PROVISIONING_PROFILE_NAME
+        - use_legacy_export: $LEGACY
+        - custom_export_options_plist_content: $PLIST
     - script:
         title: Output Test
         inputs:
@@ -113,7 +181,6 @@ workflows:
         - content: |-
             #!/bin/bash
             set -ex
-
             no_vendor_paths="$(go list ./... | grep -v vendor)"
             envman add --key GOLIST_WITHOUT_VENDOR --value "$no_vendor_paths"
     - script:
@@ -122,7 +189,6 @@ workflows:
         - content: |-
             #!/bin/bash
             set -ex
-
             errcheck -asserts=true -blank=true $GOLIST_WITHOUT_VENDOR
     - script:
         title: Go lint
@@ -146,8 +212,7 @@ workflows:
         - content: |-
             #!/bin/bash
             set -ex
-
-            go test ./...
+            go test $GOLIST_WITHOUT_VENDOR
 
   _install-test-tools:
     steps:
@@ -166,24 +231,20 @@ workflows:
 
   # ----------------------------------------------------------------
   # --- Utility workflows
-  godeps-update:
-    title: Godeps update
+  dep-update:
+    title: Dep update
     description: |
-      Used for updating bitrise dependencies with godep
+      Used for updating bitrise dependencies with dep
     steps:
     - script:
         title: Dependency update
         inputs:
-        - content: |
+        - content: |-
             #!/bin/bash
             set -ex
-            go get -u -v github.com/tools/godep
-
-            rm -rf ./Godeps
-            rm -rf ./vendor
-
-            go get -t -d ./...
-            godep save ./...
+            go get -u -v github.com/golang/dep/cmd/dep
+            dep ensure -v
+            dep ensure -v -update
 
   # ----------------------------------------------------------------
   # --- workflow to create Release version

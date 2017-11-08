@@ -3,12 +3,15 @@ package exportoptions
 import (
 	"fmt"
 
-	plist "github.com/DHowett/go-plist"
+	"howett.net/plist"
 )
 
 // AppStoreOptionsModel ...
 type AppStoreOptionsModel struct {
-	TeamID string
+	TeamID                             string
+	BundleIDProvisioningProfileMapping map[string]string
+	SigningCertificate                 string
+	SigningStyle                       string
 
 	// for app-store exports
 	UploadBitcode bool
@@ -35,6 +38,15 @@ func (options AppStoreOptionsModel) Hash() map[string]interface{} {
 	}
 	if options.UploadSymbols != UploadSymbolsDefault {
 		hash[UploadSymbolsKey] = options.UploadSymbols
+	}
+	if len(options.BundleIDProvisioningProfileMapping) > 0 {
+		hash[ProvisioningProfilesKey] = options.BundleIDProvisioningProfileMapping
+	}
+	if options.SigningCertificate != "" {
+		hash[SigningCertificateKey] = options.SigningCertificate
+	}
+	if options.SigningStyle != "" {
+		hash[SigningStyleKey] = options.SigningStyle
 	}
 	return hash
 }
