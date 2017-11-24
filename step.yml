@@ -12,8 +12,9 @@ host_os_tags:
 project_type_tags:
   - ios
   - xamarin
+  - react-native
 type_tags:
-  - script
+  - utility
 is_requires_admin_user: true
 is_always_run: false
 is_skippable: false
@@ -40,6 +41,8 @@ inputs:
       title: "Select method for export"
       summary: ""
       description: |-
+        `auto-detect` option is **DEPRECATED** - use direct export methods!
+
         Describes how Xcode should export the archive.   
         
         If you select `auto-detect` step will figure out proper export method  
@@ -121,6 +124,15 @@ inputs:
         This input will be used if `use_legacy_export` is set to `"yes"`.
 
         If this input is empty the step will use the embedded provisining profile.
+  - verbose_log: "yes"
+    opts:
+      category: Debug
+      title: "Enable verbose logging?"
+      description: Enable verbose logging?
+      is_required: true
+      value_options:
+      - "yes"
+      - "no"
 outputs:
   - BITRISE_IPA_PATH:
     opts:

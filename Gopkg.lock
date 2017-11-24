@@ -5,19 +5,19 @@
   branch = "master"
   name = "github.com/bitrise-io/go-utils"
   packages = ["colorstring","command","errorutil","fileutil","log","pathutil","pkcs12","pkcs12/internal/rc2"]
-  revision = "961320f9011cedf55e1da0578949bf63450a96c0"
+  revision = "e25bd13153e87e91289343f55b3ee8d3228fb7ac"
 
 [[projects]]
   name = "github.com/bitrise-io/steps-xcode-archive"
   packages = ["utils"]
-  revision = "d21bcd58bb944aa949319fafc0bbb3b9232e4fcc"
-  version = "2.3.7"
+  revision = "2c5e1983567046f89a62cb620d618393e51e00ce"
+  version = "2.4.1"
 
 [[projects]]
   branch = "master"
   name = "github.com/bitrise-tools/go-xcode"
   packages = ["certificateutil","export","exportoptions","models","plistutil","profileutil","utility","xcarchive","xcodebuild"]
-  revision = "69c79f6039848745dc3942f8cf1db920264ee1ce"
+  revision = "c23fa74e7b04374fbff484fd12ba87cf64cd89e1"
 
 [[projects]]
   branch = "master"

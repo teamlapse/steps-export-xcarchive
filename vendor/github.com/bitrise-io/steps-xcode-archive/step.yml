@@ -35,6 +35,8 @@ inputs:
       title: "Select method for export"
       summary: ""
       description: |-
+        `auto-detect` option is **DEPRECATED** - use direct export methods!
+
         Describes how Xcode should export the archive.
 
         If you select `auto-detect` step will figure out proper export method
@@ -275,6 +277,15 @@ inputs:
       - "yes"
       - "no"
       is_required: true
+  - verbose_log: "yes"
+    opts:
+      category: Debug
+      title: "Enable verbose logging?"
+      description: Enable verbose logging?
+      is_required: true
+      value_options:
+      - "yes"
+      - "no"
 outputs:
   - BITRISE_IPA_PATH:
     opts:

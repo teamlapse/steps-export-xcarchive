@@ -42,7 +42,8 @@ type ConfigsModel struct {
 	UseLegacyExport                     string
 	LegacyExportProvisioningProfileName string
 
-	DeployDir string
+	DeployDir  string
+	VerboseLog string
 }
 
 func createConfigsModelFromEnvs() ConfigsModel {
@@ -58,7 +59,8 @@ func createConfigsModelFromEnvs() ConfigsModel {
 		UseLegacyExport:                     os.Getenv("use_legacy_export"),
 		LegacyExportProvisioningProfileName: os.Getenv("legacy_export_provisioning_profile_name"),
 
-		DeployDir: os.Getenv("BITRISE_DEPLOY_DIR"),
+		DeployDir:  os.Getenv("BITRISE_DEPLOY_DIR"),
+		VerboseLog: os.Getenv("verbose_log"),
 	}
 }
 
@@ -66,6 +68,11 @@ func (configs ConfigsModel) print() {
 	log.Infof("Configs:")
 	log.Printf("- ArchivePath: %s", configs.ArchivePath)
 	log.Printf("- ExportMethod: %s", configs.ExportMethod)
+	if configs.ExportMethod == "auto-detect" {
+		exportMethods := []exportoptions.Method{exportoptions.MethodAppStore, exportoptions.MethodAdHoc, exportoptions.MethodEnterprise, exportoptions.MethodDevelopment}
+		log.Warnf("  Export method: auto-detect is DEPRECATED, use a direct export method %s", exportMethods)
+		fmt.Println()
+	}
 	log.Printf("- UploadBitcode: %s", configs.UploadBitcode)
 	log.Printf("- CompileBitcode: %s", configs.CompileBitcode)
 	log.Printf("- TeamID: %s", configs.TeamID)
@@ -80,6 +87,7 @@ func (configs ConfigsModel) print() {
 
 	log.Infof("Other Configs:")
 	log.Printf("- DeployDir: %s", configs.DeployDir)
+	log.Printf("- VerboseLog: %s", configs.VerboseLog)
 }
 
 func (configs ConfigsModel) validate() error {
@@ -108,66 +116,6 @@ func (configs ConfigsModel) validate() error {
 	}
 
 	return nil
-}
-
-func printCertificateInfo(info certificateutil.CertificateInfoModel) {
-	log.Printf(info.CommonName)
-	log.Printf("serial: %s", info.Serial)
-	log.Printf("team: %s (%s)", info.TeamName, info.TeamID)
-	log.Printf("expire: %s", info.EndDate)
-
-	if err := info.CheckValidity(); err != nil {
-		log.Errorf("[X] %s", err)
-	}
-}
-
-func printProfileInfo(info profileutil.ProvisioningProfileInfoModel, installedCertificates []certificateutil.CertificateInfoModel) {
-	log.Printf("%s (%s)", info.Name, info.UUID)
-	log.Printf("exportType: %s", string(info.ExportType))
-	log.Printf("team: %s (%s)", info.TeamName, info.TeamID)
-	log.Printf("bundleID: %s", info.BundleID)
-
-	log.Printf("certificates:")
-	for _, certificateInfo := range info.DeveloperCertificates {
-		log.Printf("- %s", certificateInfo.CommonName)
-		log.Printf("  serial: %s", certificateInfo.Serial)
-		log.Printf("  teamID: %s", certificateInfo.TeamID)
-	}
-
-	if len(info.ProvisionedDevices) > 0 {
-		log.Printf("devices:")
-		for _, deviceID := range info.ProvisionedDevices {
-			log.Printf("- %s", deviceID)
-		}
-	}
-
-	log.Printf("expire: %s", info.ExpirationDate)
-
-	if !info.HasInstalledCertificate(installedCertificates) {
-		log.Errorf("[X] none of the profile's certificates are installed")
-	}
-
-	if err := info.CheckValidity(); err != nil {
-		log.Errorf("[X] %s", err)
-	}
-
-	if info.IsXcodeManaged() {
-		log.Warnf("[!] xcode managed profile")
-	}
-}
-
-func printCodesignGroup(group export.CodeSignGroup) {
-	fmt.Printf("development team: %s (%s)\n", group.Certificate.TeamName, group.Certificate.TeamID)
-	fmt.Printf("codesign identity: %s [%s]\n", group.Certificate.CommonName, group.Certificate.Serial)
-	idx := -1
-	for bundleID, profile := range group.BundleIDProfileMap {
-		idx++
-		if idx == 0 {
-			fmt.Printf("provisioning profiles: %s -> %s\n", profile.Name, bundleID)
-		} else {
-			fmt.Printf("%s%s -> %s\n", strings.Repeat(" ", len("provisioning profiles: ")), profile.Name, bundleID)
-		}
-	}
 }
 
 func fail(format string, v ...interface{}) {
@@ -202,6 +150,8 @@ func main() {
 	if err := configs.validate(); err != nil {
 		fail("Issue with input: %s", err)
 	}
+
+	log.SetEnableDebugLog(configs.VerboseLog == "yes")
 
 	xcodebuildVersion, err := utility.GetXcodeVersion()
 	if err != nil {
@@ -238,12 +188,12 @@ func main() {
 		}
 	}
 
-	archive, err := xcarchive.NewXCArchive(configs.ArchivePath)
+	archive, err := xcarchive.NewIosArchive(configs.ArchivePath)
 	if err != nil {
 		fail("Failed to parse archive, error: %s", err)
 	}
 
-	mainApplication := archive.Applications.MainApplication
+	mainApplication := archive.Application
 	archiveExportMethod := mainApplication.ProvisioningProfile.ExportType
 	archiveCodeSignIsXcodeManaged := profileutil.IsXcodeManaged(mainApplication.ProvisioningProfile.Name)
 
@@ -255,26 +205,14 @@ func main() {
 	log.Printf("xcode managed profile: %v", archiveCodeSignIsXcodeManaged)
 	fmt.Println()
 
-	if configs.UseLegacyExport == "yes" {
+	if xcodebuildVersion.MajorVersion <= 6 || configs.UseLegacyExport == "yes" {
 		log.Infof("Using legacy export method...")
-
-		provisioningProfileName := ""
-		if configs.LegacyExportProvisioningProfileName != "" {
-			log.Printf("Using provisioning profile: %s", configs.LegacyExportProvisioningProfileName)
-
-			provisioningProfileName = configs.LegacyExportProvisioningProfileName
-		} else {
-			log.Printf("Using embedded provisioing profile")
-
-			provisioningProfileName = archive.Applications.MainApplication.ProvisioningProfile.Name
-			log.Printf("embedded profile name: %s", provisioningProfileName)
-		}
 
 		legacyExportCmd := xcodebuild.NewLegacyExportCommand()
 		legacyExportCmd.SetExportFormat("ipa")
 		legacyExportCmd.SetArchivePath(configs.ArchivePath)
 		legacyExportCmd.SetExportPath(ipaPath)
-		legacyExportCmd.SetExportProvisioningProfileName(provisioningProfileName)
+		legacyExportCmd.SetExportProvisioningProfileName(mainApplication.ProvisioningProfile.Name)
 
 		log.Donef("$ %s", legacyExportCmd.PrintableCmd())
 		fmt.Println()
@@ -318,133 +256,102 @@ func main() {
 			if xcodebuildVersion.MajorVersion >= 9 {
 				log.Printf("xcode major version > 9, generating provisioningProfiles node")
 
-				installedCertificates, err := certificateutil.InstalledCodesigningCertificateInfos()
+				certs, err := certificateutil.InstalledCodesigningCertificateInfos()
 				if err != nil {
 					fail("Failed to get installed certificates, error: %s", err)
 				}
+				certs = certificateutil.FilterValidCertificateInfos(certs)
 
-				fmt.Println()
-				log.Printf("Installed Codesign Identities")
-				for idx, certificate := range installedCertificates {
-					printCertificateInfo(certificate)
-					if idx < len(installedCertificates)-1 {
-						fmt.Println()
-					}
+				log.Debugf("Installed certificates:")
+				for _, certInfo := range certs {
+					log.Debugf(certInfo.String())
 				}
 
-				installedProfiles, err := profileutil.InstalledProvisioningProfileInfos(profileutil.ProfileTypeIos)
+				profs, err := profileutil.InstalledProvisioningProfileInfos(profileutil.ProfileTypeIos)
 				if err != nil {
 					fail("Failed to get installed provisioning profiles, error: %s", err)
 				}
 
-				fmt.Println()
-				log.Printf("Installed Provisioning Profiles")
-				for idx, profile := range installedProfiles {
-					printProfileInfo(profile, installedCertificates)
-					if idx < len(installedProfiles)-1 {
-						fmt.Println()
-					}
+				log.Debugf("Installed profiles:")
+				for _, profileInfo := range profs {
+					log.Debugf(profileInfo.String(certs...))
 				}
 
-				bundleIDEntitlemnstMap := archive.BundleIDEntitlementsMap()
+				bundleIDEntitlementsMap := archive.BundleIDEntitlementsMap()
+				bundleIDs := []string{}
+				for bundleID := range bundleIDEntitlementsMap {
+					bundleIDs = append(bundleIDs, bundleID)
+				}
 
 				fmt.Println()
-				log.Printf("Target Bundel ID - Entitlements map")
-				idx := -1
-				for bundleID, entitlements := range bundleIDEntitlemnstMap {
-					idx++
+				log.Printf("Target Bundle ID - Entitlements map")
+				for bundleID, entitlements := range bundleIDEntitlementsMap {
 					entitlementKeys := []string{}
 					for key := range entitlements {
 						entitlementKeys = append(entitlementKeys, key)
 					}
-					log.Printf("%s: [%s]", bundleID, strings.Join(entitlementKeys, " "))
+					log.Printf("%s: %s", bundleID, entitlementKeys)
 				}
-
-				codeSignGroups := export.ResolveCodeSignGroups(installedCertificates, installedProfiles, bundleIDEntitlemnstMap)
 
 				fmt.Println()
-				log.Printf("Installed codesign settings")
-				for idx, group := range codeSignGroups {
-					printCodesignGroup(group)
-					if idx < len(codeSignGroups)-1 {
-						fmt.Println()
-					}
-				}
+				log.Printf("Resolving CodeSignGroups...")
 
+				codeSignGroups := export.CreateSelectableCodeSignGroups(certs, profs, bundleIDs)
 				if len(codeSignGroups) == 0 {
-					log.Errorf("Failed to find code singing groups for specified export method (%s)", exportMethod)
+					log.Errorf("Failed to find code signing groups for specified export method (%s)", exportMethod)
 				}
 
-				// Filter for specified export team
-				if len(codeSignGroups) > 0 && configs.TeamID != "" {
-					log.Warnf("Filtering CodeSignInfo groups for export method: %s...", exportMethod)
-
-					codeSignGroups = export.FilterCodeSignGroupsForExportMethod(codeSignGroups, exportMethod)
-
-					if len(codeSignGroups) == 0 {
-						log.Errorf("Failed to find code singing groups for specified export method (%s)", exportMethod)
-					}
+				for _, group := range codeSignGroups {
+					log.Debugf(group.String())
 				}
 
-				// Handle if archive used NON xcode managed profile
-				if len(codeSignGroups) > 0 && !archiveCodeSignIsXcodeManaged {
-					log.Warnf("App was signed with NON xcode managed profile when archiving,")
-					log.Warnf("only NOT xcode managed profiles are allowed to sign when exporting the archive.")
-					log.Warnf("Removing xcode managed CodeSignInfo groups")
+				filters := []export.SelectableCodeSignGroupFilter{}
 
-					codeSignGroups = export.FilterCodeSignGroupsForNotXcodeManagedProfiles(codeSignGroups)
+				log.Warnf("Filtering CodeSignInfo groups for target capabilities")
+				filters = append(filters,
+					export.CreateEntitlementsSelectableCodeSignGroupFilter(bundleIDEntitlementsMap))
 
-					if len(codeSignGroups) == 0 {
-						log.Errorf("Failed to find code singing groups for specified export method (%s) and WITHOUT xcode managed profiles", exportMethod)
-					}
-				}
+				log.Warnf("Filtering CodeSignInfo groups for export method")
+				filters = append(filters,
+					export.CreateExportMethodSelectableCodeSignGroupFilter(exportMethod))
 
-				// Filter for specified export team
-				if len(codeSignGroups) > 0 && configs.TeamID != "" {
+				if configs.TeamID != "" {
 					log.Warnf("Export TeamID specified: %s, filtering CodeSignInfo groups...", configs.TeamID)
-
-					codeSignGroups = export.FilterCodeSignGroupsForTeam(codeSignGroups, configs.TeamID)
-
-					if len(codeSignGroups) == 0 {
-						log.Errorf("Failed to find code singing groups for specified export method (%s) and team (%s)", exportMethod, configs.TeamID)
-					}
+					filters = append(filters,
+						export.CreateTeamSelectableCodeSignGroupFilter(configs.TeamID))
 				}
 
-				// Filter out default code sign files
-				if len(codeSignGroups) > 0 && configs.TeamID == "" {
-					if defaultProfile, err := utils.GetDefaultProvisioningProfile(); err == nil && defaultProfile.TeamID != "" {
-						filteredGroups := []export.CodeSignGroup{}
-						for _, group := range codeSignGroups {
-							if group.Certificate.TeamID != defaultProfile.TeamID {
-								filteredGroups = append(filteredGroups, group)
-							}
+				if !archiveCodeSignIsXcodeManaged {
+					log.Warnf("App was signed with NON xcode managed profile when archiving,\n" +
+						"only NOT xcode managed profiles are allowed to sign when exporting the archive.\n" +
+						"Removing xcode managed CodeSignInfo groups")
+					filters = append(filters, export.CreateNotXcodeManagedSelectableCodeSignGroupFilter())
+				}
+
+				codeSignGroups = export.FilterSelectableCodeSignGroups(codeSignGroups, filters...)
+
+				defaultProfileURL := os.Getenv("BITRISE_DEFAULT_PROVISION_URL")
+				if configs.TeamID == "" && defaultProfileURL != "" {
+					if defaultProfile, err := utils.GetDefaultProvisioningProfile(); err == nil {
+						log.Debugf("\ndefault profile: %v\n", defaultProfile)
+						filteredCodeSignGroups := export.FilterSelectableCodeSignGroups(codeSignGroups,
+							export.CreateExcludeProfileNameSelectableCodeSignGroupFilter(defaultProfile.Name))
+						if len(filteredCodeSignGroups) > 0 {
+							codeSignGroups = filteredCodeSignGroups
 						}
-
-						if len(filteredGroups) > 0 {
-							codeSignGroups = filteredGroups
-						}
 					}
 				}
 
-				fmt.Println()
-				log.Printf("Filtered codesign settings")
-				for idx, group := range codeSignGroups {
-					printCodesignGroup(group)
-					if idx < len(codeSignGroups)-1 {
-						fmt.Println()
+				iosCodeSignGroups := export.CreateIosCodeSignGroups(codeSignGroups)
+
+				if len(iosCodeSignGroups) > 0 {
+					codeSignGroup := export.IosCodeSignGroup{}
+
+					if len(iosCodeSignGroups) >= 1 {
+						codeSignGroup = iosCodeSignGroups[0]
 					}
-				}
-
-				if len(codeSignGroups) > 0 {
-					codeSignGroup := export.CodeSignGroup{}
-
-					if len(codeSignGroups) == 1 {
-						codeSignGroup = codeSignGroups[0]
-					} else if len(codeSignGroups) > 1 {
-						log.Warnf("Multiple code singing groups found")
-
-						codeSignGroup = codeSignGroups[0]
-						log.Warnf("Using first group")
+					if len(iosCodeSignGroups) > 1 {
+						log.Warnf("Multiple code signing groups found! Using the first code signing group")
 					}
 
 					exportTeamID = codeSignGroup.Certificate.TeamID
@@ -456,142 +363,144 @@ func main() {
 						isXcodeManaged := profileutil.IsXcodeManaged(profileInfo.Name)
 						if isXcodeManaged {
 							if exportCodeSignStyle != "" && exportCodeSignStyle != "automatic" {
-								log.Errorf("Both xcode managed and NON xcode managed profiles in code singing group")
+								log.Errorf("Both xcode managed and NON xcode managed profiles in code signing group")
 							}
 							exportCodeSignStyle = "automatic"
 						} else {
 							if exportCodeSignStyle != "" && exportCodeSignStyle != "manual" {
-								log.Errorf("Both xcode managed and NON xcode managed profiles in code singing group")
+								log.Errorf("Both xcode managed and NON xcode managed profiles in code signing group")
 							}
 							exportCodeSignStyle = "manual"
 						}
 					}
+				} else {
+					log.Errorf("Failed to find Codesign Groups")
 				}
-			}
 
-			var exportOpts exportoptions.ExportOptions
-			if exportMethod == exportoptions.MethodAppStore {
-				options := exportoptions.NewAppStoreOptions()
-				options.UploadBitcode = (configs.UploadBitcode == "yes")
+				var exportOpts exportoptions.ExportOptions
+				if exportMethod == exportoptions.MethodAppStore {
+					options := exportoptions.NewAppStoreOptions()
+					options.UploadBitcode = (configs.UploadBitcode == "yes")
 
-				if xcodebuildVersion.MajorVersion >= 9 {
-					options.BundleIDProvisioningProfileMapping = exportProfileMapping
-					options.SigningCertificate = exportCodeSignIdentity
-					options.TeamID = exportTeamID
+					if xcodebuildVersion.MajorVersion >= 9 {
+						options.BundleIDProvisioningProfileMapping = exportProfileMapping
+						options.SigningCertificate = exportCodeSignIdentity
+						options.TeamID = exportTeamID
 
-					if archiveCodeSignIsXcodeManaged && exportCodeSignStyle == "manual" {
-						log.Warnf("App was signed with xcode managed profile when archiving,")
-						log.Warnf("ipa export uses manual code singing.")
-						log.Warnf(`Setting "signingStyle" to "manual"`)
+						if archiveCodeSignIsXcodeManaged && exportCodeSignStyle == "manual" {
+							log.Warnf("App was signed with xcode managed profile when archiving,")
+							log.Warnf("ipa export uses manual code singing.")
+							log.Warnf(`Setting "signingStyle" to "manual"`)
 
-						options.SigningStyle = "manual"
+							options.SigningStyle = "manual"
+						}
 					}
-				}
 
-				exportOpts = options
-			} else {
-				options := exportoptions.NewNonAppStoreOptions(exportMethod)
-				options.CompileBitcode = (configs.CompileBitcode == "yes")
+					exportOpts = options
+				} else {
+					options := exportoptions.NewNonAppStoreOptions(exportMethod)
+					options.CompileBitcode = (configs.CompileBitcode == "yes")
 
-				if xcodebuildVersion.MajorVersion >= 9 {
-					options.BundleIDProvisioningProfileMapping = exportProfileMapping
-					options.SigningCertificate = exportCodeSignIdentity
-					options.TeamID = exportTeamID
+					if xcodebuildVersion.MajorVersion >= 9 {
+						options.BundleIDProvisioningProfileMapping = exportProfileMapping
+						options.SigningCertificate = exportCodeSignIdentity
+						options.TeamID = exportTeamID
 
-					if archiveCodeSignIsXcodeManaged && exportCodeSignStyle == "manual" {
-						log.Warnf("App was signed with xcode managed profile when archiving,")
-						log.Warnf("ipa export uses manual code singing.")
-						log.Warnf(`Setting "signingStyle" to "manual"`)
+						if archiveCodeSignIsXcodeManaged && exportCodeSignStyle == "manual" {
+							log.Warnf("App was signed with xcode managed profile when archiving,")
+							log.Warnf("ipa export uses manual code singing.")
+							log.Warnf(`Setting "signingStyle" to "manual"`)
 
-						options.SigningStyle = "manual"
+							options.SigningStyle = "manual"
+						}
 					}
+
+					exportOpts = options
 				}
 
-				exportOpts = options
+				fmt.Println()
+				log.Printf("generated export options content:")
+				fmt.Println()
+				fmt.Println(exportOpts.String())
+
+				if err = exportOpts.WriteToFile(exportOptionsPath); err != nil {
+					fail("Failed to write export options to file, error: %s", err)
+				}
 			}
 
 			fmt.Println()
-			log.Printf("generated export options content:")
-			fmt.Println()
-			fmt.Println(exportOpts.String())
 
-			if err = exportOpts.WriteToFile(exportOptionsPath); err != nil {
-				fail("Failed to write export options to file, error: %s", err)
+			tmpDir, err := pathutil.NormalizedOSTempDirPath("__export__")
+			if err != nil {
+				fail("Failed to create tmp dir, error: %s", err)
 			}
-		}
 
-		fmt.Println()
+			exportCmd := xcodebuild.NewExportCommand()
+			exportCmd.SetArchivePath(configs.ArchivePath)
+			exportCmd.SetExportDir(tmpDir)
+			exportCmd.SetExportOptionsPlist(exportOptionsPath)
 
-		tmpDir, err := pathutil.NormalizedOSTempDirPath("__export__")
-		if err != nil {
-			fail("Failed to create tmp dir, error: %s", err)
-		}
+			log.Donef("$ %s", exportCmd.PrintableCmd())
+			fmt.Println()
 
-		exportCmd := xcodebuild.NewExportCommand()
-		exportCmd.SetArchivePath(configs.ArchivePath)
-		exportCmd.SetExportDir(tmpDir)
-		exportCmd.SetExportOptionsPlist(exportOptionsPath)
-
-		log.Donef("$ %s", exportCmd.PrintableCmd())
-		fmt.Println()
-
-		if xcodebuildOut, err := exportCmd.RunAndReturnOutput(); err != nil {
-			// xcdistributionlogs
-			if logsDirPth, err := findIDEDistrubutionLogsPath(xcodebuildOut); err != nil {
-				log.Warnf("Failed to find xcdistributionlogs, error: %s", err)
-			} else if err := utils.ExportOutputDirAsZip(logsDirPth, ideDistributionLogsZipPath, bitriseIDEDistributionLogsPthEnvKey); err != nil {
-				log.Warnf("Failed to export %s, error: %s", bitriseIDEDistributionLogsPthEnvKey, err)
-			} else {
-				log.Warnf(`If you can't find the reason of the error in the log, please check the xcdistributionlogs
+			if xcodebuildOut, err := exportCmd.RunAndReturnOutput(); err != nil {
+				// xcdistributionlogs
+				if logsDirPth, err := findIDEDistrubutionLogsPath(xcodebuildOut); err != nil {
+					log.Warnf("Failed to find xcdistributionlogs, error: %s", err)
+				} else if err := utils.ExportOutputDirAsZip(logsDirPth, ideDistributionLogsZipPath, bitriseIDEDistributionLogsPthEnvKey); err != nil {
+					log.Warnf("Failed to export %s, error: %s", bitriseIDEDistributionLogsPthEnvKey, err)
+				} else {
+					log.Warnf(`If you can't find the reason of the error in the log, please check the xcdistributionlogs
 The logs directory is stored in $BITRISE_DEPLOY_DIR, and its full path
 is available in the $BITRISE_IDEDISTRIBUTION_LOGS_PATH environment variable`)
+				}
+
+				fail("Export failed, error: %s", err)
 			}
 
-			fail("Export failed, error: %s", err)
-		}
-
-		// Search for ipa
-		pattern := filepath.Join(tmpDir, "*.ipa")
-		ipas, err := filepath.Glob(pattern)
-		if err != nil {
-			fail("Failed to collect ipa files, error: %s", err)
-		}
-
-		if len(ipas) == 0 {
-			fail("No ipa found with pattern: %s", pattern)
-		} else if len(ipas) == 1 {
-			if err := command.CopyFile(ipas[0], ipaPath); err != nil {
-				fail("Failed to copy (%s) -> (%s), error: %s", ipas[0], ipaPath, err)
+			// Search for ipa
+			pattern := filepath.Join(tmpDir, "*.ipa")
+			ipas, err := filepath.Glob(pattern)
+			if err != nil {
+				fail("Failed to collect ipa files, error: %s", err)
 			}
-		} else {
-			log.Warnf("More than 1 .ipa file found")
 
-			for _, ipa := range ipas {
-				base := filepath.Base(ipa)
-				deployPth := filepath.Join(configs.DeployDir, base)
-
-				if err := command.CopyFile(ipa, deployPth); err != nil {
+			if len(ipas) == 0 {
+				fail("No ipa found with pattern: %s", pattern)
+			} else if len(ipas) == 1 {
+				if err := command.CopyFile(ipas[0], ipaPath); err != nil {
 					fail("Failed to copy (%s) -> (%s), error: %s", ipas[0], ipaPath, err)
 				}
-				ipaPath = ipa
+			} else {
+				log.Warnf("More than 1 .ipa file found")
+
+				for _, ipa := range ipas {
+					base := filepath.Base(ipa)
+					deployPth := filepath.Join(configs.DeployDir, base)
+
+					if err := command.CopyFile(ipa, deployPth); err != nil {
+						fail("Failed to copy (%s) -> (%s), error: %s", ipas[0], ipaPath, err)
+					}
+					ipaPath = ipa
+				}
 			}
 		}
+
+		if err := utils.ExportOutputFile(ipaPath, ipaPath, bitriseIPAPthEnvKey); err != nil {
+			fail("Failed to export %s, error: %s", bitriseIPAPthEnvKey, err)
+		}
+
+		log.Donef("The ipa path is now available in the Environment Variable: %s (value: %s)", bitriseIPAPthEnvKey, ipaPath)
+
+		appDSYM, _, err := archive.FindDSYMs()
+		if err != nil {
+			fail("Failed to export dsym, error: %s", err)
+		}
+
+		if err := utils.ExportOutputDirAsZip(appDSYM, dsymZipPath, bitriseDSYMPthEnvKey); err != nil {
+			fail("Failed to export %s, error: %s", bitriseDSYMPthEnvKey, err)
+		}
+
+		log.Donef("The dSYM zip path is now available in the Environment Variable: %s (value: %s)", bitriseDSYMPthEnvKey, dsymZipPath)
 	}
-
-	if err := utils.ExportOutputFile(ipaPath, ipaPath, bitriseIPAPthEnvKey); err != nil {
-		fail("Failed to export %s, error: %s", bitriseIPAPthEnvKey, err)
-	}
-
-	log.Donef("The ipa path is now available in the Environment Variable: %s (value: %s)", bitriseIPAPthEnvKey, ipaPath)
-
-	appDSYM, _, err := archive.FindDSYMs()
-	if err != nil {
-		fail("Failed to export dsym, error: %s", err)
-	}
-
-	if err := utils.ExportOutputDirAsZip(appDSYM, dsymZipPath, bitriseDSYMPthEnvKey); err != nil {
-		fail("Failed to export %s, error: %s", bitriseDSYMPthEnvKey, err)
-	}
-
-	log.Donef("The dSYM zip path is now available in the Environment Variable: %s (value: %s)", bitriseDSYMPthEnvKey, dsymZipPath)
 }
