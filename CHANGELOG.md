@@ -1,6 +1,12 @@
-## Changelog (Current version: 0.9.2)
+## Changelog (Current version: 0.9.3)
 
 -----------------
+
+### 0.9.3 (2017 Nov 24)
+
+* [1c499c8] Bump version to 0.9.3
+* [79ce56a] Update code to use the newest go-xcode package (#6)
+* [feecfde] xcode 9 (#5)
 
 ### 0.9.2 (2016 Dec 19)
 
@@ -14,4 +20,4 @@
 
 -----------------
 
-Updated: 2016 Dec 19
+Updated: 2017 Nov 24
