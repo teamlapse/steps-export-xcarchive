@@ -174,7 +174,7 @@ workflows:
             		<string>BitriseBot-Wildcard</string>
             	</dict>
             	<key>signingCertificate</key>
-            	<string>7C98471BFDDF66FFB1AD399AD282AC05EF44D464</string>
+            	<string>iPhone Developer: Bitrise Bot</string>
             	<key>signingStyle</key>
             	<string>manual</string>
             	<key>stripSwiftSymbols</key>
@@ -240,10 +240,10 @@ workflows:
             	<key>provisioningProfiles</key>
             	<dict>
             		<key>bdh.NPO-Live.bitrise.sample</key>
-            		<string>Bitrise bdh NPOLive TVOS_dev</string>
+            		<string>Bitrise development - (bdh.NPO-Live.bitrise.sample)</string>
             	</dict>
             	<key>signingCertificate</key>
-            	<string>7C98471BFDDF66FFB1AD399AD282AC05EF44D464</string>
+            	<string>iPhone Developer: Bitrise Bot</string>
             	<key>signingStyle</key>
             	<string>manual</string>
             	<key>stripSwiftSymbols</key>

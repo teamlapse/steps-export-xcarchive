@@ -11,8 +11,11 @@ host_os_tags:
   - osx-10.10
 project_type_tags:
   - ios
-  - xamarin
+  - cordova
+  - ionic
   - react-native
+  - flutter
+  - xamarin
 type_tags:
   - utility
 is_requires_admin_user: true
