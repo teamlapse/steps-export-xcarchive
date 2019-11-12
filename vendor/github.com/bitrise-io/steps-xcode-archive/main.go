@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,22 +9,28 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bitrise-io/go-steputils/input"
+	"github.com/bitrise-io/go-steputils/stepconf"
 	"github.com/bitrise-io/go-utils/colorstring"
 	"github.com/bitrise-io/go-utils/command"
+	"github.com/bitrise-io/go-utils/errorutil"
 	"github.com/bitrise-io/go-utils/fileutil"
 	"github.com/bitrise-io/go-utils/log"
 	"github.com/bitrise-io/go-utils/pathutil"
-	"github.com/bitrise-io/steps-xcode-archive/utils"
-	"github.com/bitrise-tools/go-xcode/certificateutil"
-	"github.com/bitrise-tools/go-xcode/export"
-	"github.com/bitrise-tools/go-xcode/exportoptions"
-	"github.com/bitrise-tools/go-xcode/plistutil"
-	"github.com/bitrise-tools/go-xcode/profileutil"
-	"github.com/bitrise-tools/go-xcode/xcarchive"
-	"github.com/bitrise-tools/go-xcode/xcodebuild"
-	"github.com/bitrise-tools/go-xcode/xcodeproj"
-	"github.com/bitrise-tools/go-xcode/xcpretty"
+	"github.com/bitrise-io/go-utils/sliceutil"
+	"github.com/bitrise-io/go-utils/stringutil"
+	"github.com/bitrise-io/go-xcode/certificateutil"
+	"github.com/bitrise-io/go-xcode/export"
+	"github.com/bitrise-io/go-xcode/exportoptions"
+	"github.com/bitrise-io/go-xcode/profileutil"
+	"github.com/bitrise-io/go-xcode/utility"
+	"github.com/bitrise-io/go-xcode/xcarchive"
+	"github.com/bitrise-io/go-xcode/xcodebuild"
+	cache "github.com/bitrise-io/go-xcode/xcodecache"
+	"github.com/bitrise-io/go-xcode/xcpretty"
+	"github.com/bitrise-steplib/steps-xcode-archive/utils"
 	"github.com/kballard/go-shellquote"
+	"howett.net/plist"
 )
 
 const (
@@ -43,161 +48,36 @@ const (
 	bitriseDSYMPthEnvKey                = "BITRISE_DSYM_PATH"
 )
 
-// ConfigsModel ...
-type ConfigsModel struct {
-	ExportMethod   string
-	UploadBitcode  string
-	CompileBitcode string
-	TeamID         string
+// configs ...
+type configs struct {
+	ExportMethod               string `env:"export_method,opt[auto-detect,app-store,ad-hoc,enterprise,development]"`
+	UploadBitcode              bool   `env:"upload_bitcode,opt[yes,no]"`
+	CompileBitcode             bool   `env:"compile_bitcode,opt[yes,no]"`
+	ICloudContainerEnvironment string `env:"icloud_container_environment"`
+	TeamID                     string `env:"team_id"`
 
-	UseDeprecatedExport               string
-	ForceTeamID                       string
-	ForceProvisioningProfileSpecifier string
-	ForceProvisioningProfile          string
-	ForceCodeSignIdentity             string
-	CustomExportOptionsPlistContent   string
+	UseDeprecatedExport               bool   `env:"use_deprecated_export,opt[yes,no]"`
+	ForceTeamID                       string `env:"force_team_id"`
+	ForceProvisioningProfileSpecifier string `env:"force_provisioning_profile_specifier"`
+	ForceProvisioningProfile          string `env:"force_provisioning_profile"`
+	ForceCodeSignIdentity             string `env:"force_code_sign_identity"`
+	CustomExportOptionsPlistContent   string `env:"custom_export_options_plist_content"`
 
-	OutputTool        string
-	Workdir           string
-	ProjectPath       string
-	Scheme            string
-	Configuration     string
-	OutputDir         string
-	IsCleanBuild      string
-	XcodebuildOptions string
+	OutputTool                string `env:"output_tool,opt[xcpretty,xcodebuild]"`
+	Workdir                   string `env:"workdir"`
+	ProjectPath               string `env:"project_path,file"`
+	Scheme                    string `env:"scheme,required"`
+	Configuration             string `env:"configuration"`
+	OutputDir                 string `env:"output_dir,required"`
+	IsCleanBuild              bool   `env:"is_clean_build,opt[yes,no]"`
+	XcodebuildOptions         string `env:"xcodebuild_options"`
+	DisableIndexWhileBuilding bool   `env:"disable_index_while_building,opt[yes,no]"`
 
-	IsExportXcarchiveZip string
-	ExportAllDsyms       string
-	ArtifactName         string
-	VerboseLog           string
-}
+	ExportAllDsyms bool   `env:"export_all_dsyms,opt[yes,no]"`
+	ArtifactName   string `env:"artifact_name"`
+	VerboseLog     bool   `env:"verbose_log,opt[yes,no]"`
 
-func createConfigsModelFromEnvs() ConfigsModel {
-	return ConfigsModel{
-		ExportMethod:   os.Getenv("export_method"),
-		UploadBitcode:  os.Getenv("upload_bitcode"),
-		CompileBitcode: os.Getenv("compile_bitcode"),
-		TeamID:         os.Getenv("team_id"),
-
-		UseDeprecatedExport:               os.Getenv("use_deprecated_export"),
-		ForceTeamID:                       os.Getenv("force_team_id"),
-		ForceProvisioningProfileSpecifier: os.Getenv("force_provisioning_profile_specifier"),
-		ForceProvisioningProfile:          os.Getenv("force_provisioning_profile"),
-		ForceCodeSignIdentity:             os.Getenv("force_code_sign_identity"),
-		CustomExportOptionsPlistContent:   os.Getenv("custom_export_options_plist_content"),
-
-		OutputTool:        os.Getenv("output_tool"),
-		Workdir:           os.Getenv("workdir"),
-		ProjectPath:       os.Getenv("project_path"),
-		Scheme:            os.Getenv("scheme"),
-		Configuration:     os.Getenv("configuration"),
-		OutputDir:         os.Getenv("output_dir"),
-		IsCleanBuild:      os.Getenv("is_clean_build"),
-		XcodebuildOptions: os.Getenv("xcodebuild_options"),
-
-		IsExportXcarchiveZip: os.Getenv("is_export_xcarchive_zip"),
-		ExportAllDsyms:       os.Getenv("export_all_dsyms"),
-		ArtifactName:         os.Getenv("artifact_name"),
-		VerboseLog:           os.Getenv("verbose_log"),
-	}
-}
-
-func (configs ConfigsModel) print() {
-
-	log.Infof("ipa export configs:")
-	log.Printf("- ExportMethod: %s", configs.ExportMethod)
-	if configs.ExportMethod == "auto-detect" {
-		exportMethods := []exportoptions.Method{exportoptions.MethodAppStore, exportoptions.MethodAdHoc, exportoptions.MethodEnterprise, exportoptions.MethodDevelopment}
-		log.Warnf("  Export method: auto-detect is DEPRECATED, use a direct export method %s", exportMethods)
-		fmt.Println()
-	}
-	log.Printf("- UploadBitcode: %s", configs.UploadBitcode)
-	log.Printf("- CompileBitcode: %s", configs.CompileBitcode)
-	log.Printf("- TeamID: %s", configs.TeamID)
-	log.Printf("- UseDeprecatedExport: %s", configs.UseDeprecatedExport)
-	log.Printf("- CustomExportOptionsPlistContent:")
-	if configs.CustomExportOptionsPlistContent != "" {
-		log.Printf(configs.CustomExportOptionsPlistContent)
-	}
-	fmt.Println()
-
-	log.Infof("xcodebuild configs:")
-	log.Printf("- OutputTool: %s", configs.OutputTool)
-	log.Printf("- Workdir: %s", configs.Workdir)
-	log.Printf("- ProjectPath: %s", configs.ProjectPath)
-	log.Printf("- Scheme: %s", configs.Scheme)
-	log.Printf("- Configuration: %s", configs.Configuration)
-	log.Printf("- OutputDir: %s", configs.OutputDir)
-	log.Printf("- IsCleanBuild: %s", configs.IsCleanBuild)
-	log.Printf("- XcodebuildOptions: %s", configs.XcodebuildOptions)
-	log.Printf("- ForceTeamID: %s", configs.ForceTeamID)
-	log.Printf("- ForceProvisioningProfileSpecifier: %s", configs.ForceProvisioningProfileSpecifier)
-	log.Printf("- ForceProvisioningProfile: %s", configs.ForceProvisioningProfile)
-	log.Printf("- ForceCodeSignIdentity: %s", configs.ForceCodeSignIdentity)
-	fmt.Println()
-
-	log.Infof("step output configs:")
-	log.Printf("- IsExportXcarchiveZip: %s", configs.IsExportXcarchiveZip)
-	log.Printf("- ExportAllDsyms: %s", configs.ExportAllDsyms)
-	log.Printf("- ArtifactName: %s", configs.ArtifactName)
-	log.Printf("- VerboseLog: %s", configs.VerboseLog)
-	fmt.Println()
-}
-
-func (configs ConfigsModel) validate() error {
-	if configs.ProjectPath == "" {
-		return errors.New("no ProjectPath parameter specified")
-	}
-	if exist, err := pathutil.IsPathExists(configs.ProjectPath); err != nil {
-		return fmt.Errorf("failed to check if ProjectPath exist at: %s, error: %s", configs.ProjectPath, err)
-	} else if !exist {
-		return fmt.Errorf("projectPath not exist at: %s", configs.ProjectPath)
-	}
-
-	if configs.Scheme == "" {
-		return errors.New("no Scheme parameter specified")
-	}
-
-	if configs.OutputDir == "" {
-		return errors.New("no OutputDir parameter specified")
-	}
-
-	if configs.OutputTool == "" {
-		return errors.New("no OutputTool parameter specified")
-	}
-	if configs.OutputTool != "xcpretty" && configs.OutputTool != "xcodebuild" {
-		return fmt.Errorf("invalid OutputTool specified (%s), valid options: [xcpretty xcodebuild]", configs.OutputTool)
-	}
-
-	if configs.IsCleanBuild == "" {
-		return errors.New("no IsCleanBuild parameter specified")
-	}
-	if configs.IsCleanBuild != "yes" && configs.IsCleanBuild != "no" {
-		return fmt.Errorf("invalid IsCleanBuild specified (%s), valid options: [yes no]", configs.IsCleanBuild)
-	}
-
-	if configs.IsExportXcarchiveZip == "" {
-		return errors.New("no IsExportXcarchiveZip parameter specified")
-	}
-	if configs.IsExportXcarchiveZip != "yes" && configs.IsExportXcarchiveZip != "no" {
-		return fmt.Errorf("invalid IsExportXcarchiveZip specified (%s), valid options: [yes no]", configs.IsExportXcarchiveZip)
-	}
-
-	if configs.UseDeprecatedExport == "" {
-		return errors.New("no UseDeprecatedExport parameter specified")
-	}
-	if configs.UseDeprecatedExport != "yes" && configs.UseDeprecatedExport != "no" {
-		return fmt.Errorf("invalid UseDeprecatedExport specified (%s), valid options: [yes no]", configs.UseDeprecatedExport)
-	}
-
-	if configs.ExportAllDsyms == "" {
-		return errors.New("no ExportAllDsyms parameter specified")
-	}
-	if configs.ExportAllDsyms != "yes" && configs.ExportAllDsyms != "no" {
-		return fmt.Errorf("invalid ExportAllDsyms specified (%s), valid options: [yes no]", configs.ExportAllDsyms)
-	}
-
-	return nil
+	CacheLevel string `env:"cache_level,opt[none,swift_packages]"`
 }
 
 func fail(format string, v ...interface{}) {
@@ -239,49 +119,97 @@ func logWithTimestamp(coloringFunc ColoringFunc, format string, v ...interface{}
 }
 
 func main() {
-	configs := createConfigsModelFromEnvs()
-
-	fmt.Println()
-	configs.print()
-
-	if err := configs.validate(); err != nil {
+	var cfg configs
+	if err := stepconf.Parse(&cfg); err != nil {
 		fail("Issue with input: %s", err)
 	}
 
-	log.SetEnableDebugLog(configs.VerboseLog == "yes")
+	stepconf.Print(cfg)
+	fmt.Println()
+	log.SetEnableDebugLog(cfg.VerboseLog)
+
+	if cfg.ExportMethod == "auto-detect" {
+		exportMethods := []exportoptions.Method{exportoptions.MethodAppStore, exportoptions.MethodAdHoc, exportoptions.MethodEnterprise, exportoptions.MethodDevelopment}
+		log.Warnf("Export method: auto-detect is DEPRECATED, use a direct export method %s", exportMethods)
+		fmt.Println()
+	}
+
+	if cfg.Workdir != "" {
+		if err := input.ValidateIfDirExists(cfg.Workdir); err != nil {
+			fail("issue with input Workdir: " + err.Error())
+		}
+	}
+
+	if cfg.CustomExportOptionsPlistContent != "" {
+		var options map[string]interface{}
+		if _, err := plist.Unmarshal([]byte(cfg.CustomExportOptionsPlistContent), &options); err != nil {
+			fail("issue with input CustomExportOptionsPlistContent: " + err.Error())
+		}
+	}
 
 	log.Infof("step determined configs:")
 
 	// Detect Xcode major version
-	xcodebuildVersion, err := utils.XcodeBuildVersion()
+	xcodebuildVersion, err := utility.GetXcodeVersion()
 	if err != nil {
 		fail("Failed to determin xcode version, error: %s", err)
 	}
-	log.Printf("- xcodebuildVersion: %s (%s)", xcodebuildVersion.XcodeVersion.String(), xcodebuildVersion.BuildVersion)
+	log.Printf("- xcodebuildVersion: %s (%s)", xcodebuildVersion.Version, xcodebuildVersion.BuildVersion)
 
-	xcodeMajorVersion := xcodebuildVersion.XcodeVersion.Segments()[0]
+	xcodeMajorVersion := xcodebuildVersion.MajorVersion
 	if xcodeMajorVersion < minSupportedXcodeMajorVersion {
-		fail("Invalid xcode major version (%s), should not be less then min supported: %d", xcodeMajorVersion, minSupportedXcodeMajorVersion)
+		fail("Invalid xcode major version (%d), should not be less then min supported: %d", xcodeMajorVersion, minSupportedXcodeMajorVersion)
 	}
 
 	// Detect xcpretty version
-	if configs.OutputTool == "xcpretty" {
-		if !utils.IsXcprettyInstalled() {
-			fail(`xcpretty is not installed
-For xcpretty installation see: 'https://github.com/supermarin/xcpretty',
-or use 'xcodebuild' as 'output_tool'.`)
-		}
+	outputTool := cfg.OutputTool
+	if outputTool == "xcpretty" {
+		fmt.Println()
+		log.Infof("Checking if output tool (xcpretty) is installed")
 
-		xcprettyVersion, err := utils.XcprettyVersion()
+		installed, err := xcpretty.IsInstalled()
 		if err != nil {
-			fail("Failed to determin xcpretty version, error: %s", err)
+			log.Warnf("Failed to check if xcpretty is installed, error: %s", err)
+			log.Printf("Switching to xcodebuild for output tool")
+			outputTool = "xcodebuild"
+		} else if !installed {
+			log.Warnf(`xcpretty is not installed`)
+			fmt.Println()
+			log.Printf("Installing xcpretty")
+
+			if cmds, err := xcpretty.Install(); err != nil {
+				log.Warnf("Failed to create xcpretty install command: %s", err)
+				log.Warnf("Switching to xcodebuild for output tool")
+				outputTool = "xcodebuild"
+			} else {
+				for _, cmd := range cmds {
+					if out, err := cmd.RunAndReturnTrimmedCombinedOutput(); err != nil {
+						if errorutil.IsExitStatusError(err) {
+							log.Warnf("%s failed: %s", out)
+						} else {
+							log.Warnf("%s failed: %s", err)
+						}
+						log.Warnf("Switching to xcodebuild for output tool")
+						outputTool = "xcodebuild"
+					}
+				}
+			}
+		}
+	}
+
+	if outputTool == "xcpretty" {
+		xcprettyVersion, err := xcpretty.Version()
+		if err != nil {
+			log.Warnf("Failed to determin xcpretty version, error: %s", err)
+			log.Printf("Switching to xcodebuild for output tool")
+			outputTool = "xcodebuild"
 		}
 		log.Printf("- xcprettyVersion: %s", xcprettyVersion.String())
 	}
 
 	// Validation CustomExportOptionsPlistContent
-	customExportOptionsPlistContent := strings.TrimSpace(configs.CustomExportOptionsPlistContent)
-	if customExportOptionsPlistContent != configs.CustomExportOptionsPlistContent {
+	customExportOptionsPlistContent := strings.TrimSpace(cfg.CustomExportOptionsPlistContent)
+	if customExportOptionsPlistContent != cfg.CustomExportOptionsPlistContent {
 		fmt.Println()
 		log.Warnf("CustomExportOptionsPlistContent is stripped to remove spaces and new lines:")
 		log.Printf(customExportOptionsPlistContent)
@@ -295,49 +223,54 @@ or use 'xcodebuild' as 'output_tool'.`)
 		} else {
 			fmt.Println()
 			log.Warnf("Ignoring the following options because CustomExportOptionsPlistContent provided:")
-			log.Printf("- ExportMethod: %s", configs.ExportMethod)
-			log.Printf("- UploadBitcode: %s", configs.UploadBitcode)
-			log.Printf("- CompileBitcode: %s", configs.CompileBitcode)
-			log.Printf("- TeamID: %s", configs.TeamID)
+			log.Printf("- ExportMethod: %s", cfg.ExportMethod)
+			log.Printf("- UploadBitcode: %s", cfg.UploadBitcode)
+			log.Printf("- CompileBitcode: %s", cfg.CompileBitcode)
+			log.Printf("- TeamID: %s", cfg.TeamID)
 			fmt.Println()
 		}
 	}
 
-	if configs.ForceProvisioningProfileSpecifier != "" &&
+	if cfg.ForceProvisioningProfileSpecifier != "" &&
 		xcodeMajorVersion < 8 {
 		fmt.Println()
 		log.Warnf("ForceProvisioningProfileSpecifier is set, but ForceProvisioningProfileSpecifier only used if xcodeMajorVersion > 7")
-		configs.ForceProvisioningProfileSpecifier = ""
+		cfg.ForceProvisioningProfileSpecifier = ""
 	}
 
-	if configs.ForceTeamID != "" &&
+	if cfg.ForceTeamID != "" &&
 		xcodeMajorVersion < 8 {
 		fmt.Println()
 		log.Warnf("ForceTeamID is set, but ForceTeamID only used if xcodeMajorVersion > 7")
-		configs.ForceTeamID = ""
+		cfg.ForceTeamID = ""
 	}
 
-	if configs.ForceProvisioningProfileSpecifier != "" &&
-		configs.ForceProvisioningProfile != "" {
+	if cfg.ForceProvisioningProfileSpecifier != "" &&
+		cfg.ForceProvisioningProfile != "" {
 		fmt.Println()
 		log.Warnf("both ForceProvisioningProfileSpecifier and ForceProvisioningProfile are set, using ForceProvisioningProfileSpecifier")
-		configs.ForceProvisioningProfile = ""
+		cfg.ForceProvisioningProfile = ""
 	}
 
 	fmt.Println()
 
-	// abs out dir pth
-	absOutputDir, err := pathutil.AbsPath(configs.OutputDir)
+	absProjectPath, err := filepath.Abs(cfg.ProjectPath)
 	if err != nil {
-		fail("Failed to expand OutputDir (%s), error: %s", configs.OutputDir, err)
+		fail("Failed to get absolute project path, error: %s", err)
 	}
-	configs.OutputDir = absOutputDir
 
-	if exist, err := pathutil.IsPathExists(configs.OutputDir); err != nil {
+	// abs out dir pth
+	absOutputDir, err := pathutil.AbsPath(cfg.OutputDir)
+	if err != nil {
+		fail("Failed to expand OutputDir (%s), error: %s", cfg.OutputDir, err)
+	}
+	cfg.OutputDir = absOutputDir
+
+	if exist, err := pathutil.IsPathExists(cfg.OutputDir); err != nil {
 		fail("Failed to check if OutputDir exist, error: %s", err)
 	} else if !exist {
-		if err := os.MkdirAll(configs.OutputDir, 0777); err != nil {
-			fail("Failed to create OutputDir (%s), error: %s", configs.OutputDir, err)
+		if err := os.MkdirAll(cfg.OutputDir, 0777); err != nil {
+			fail("Failed to create OutputDir (%s), error: %s", cfg.OutputDir, err)
 		}
 	}
 
@@ -346,16 +279,16 @@ or use 'xcodebuild' as 'output_tool'.`)
 	if err != nil {
 		fail("Failed to create temp dir for archives, error: %s", err)
 	}
-	tmpArchivePath := filepath.Join(tmpArchiveDir, configs.ArtifactName+".xcarchive")
+	tmpArchivePath := filepath.Join(tmpArchiveDir, cfg.ArtifactName+".xcarchive")
 
-	appPath := filepath.Join(configs.OutputDir, configs.ArtifactName+".app")
-	ipaPath := filepath.Join(configs.OutputDir, configs.ArtifactName+".ipa")
-	exportOptionsPath := filepath.Join(configs.OutputDir, "export_options.plist")
-	rawXcodebuildOutputLogPath := filepath.Join(configs.OutputDir, "raw-xcodebuild-output.log")
+	appPath := filepath.Join(cfg.OutputDir, cfg.ArtifactName+".app")
+	ipaPath := filepath.Join(cfg.OutputDir, cfg.ArtifactName+".ipa")
+	exportOptionsPath := filepath.Join(cfg.OutputDir, "export_options.plist")
+	rawXcodebuildOutputLogPath := filepath.Join(cfg.OutputDir, "raw-xcodebuild-output.log")
 
-	dsymZipPath := filepath.Join(configs.OutputDir, configs.ArtifactName+".dSYM.zip")
-	archiveZipPath := filepath.Join(configs.OutputDir, configs.ArtifactName+".xcarchive.zip")
-	ideDistributionLogsZipPath := filepath.Join(configs.OutputDir, "xcodebuild.xcdistributionlogs.zip")
+	dsymZipPath := filepath.Join(cfg.OutputDir, cfg.ArtifactName+".dSYM.zip")
+	archiveZipPath := filepath.Join(cfg.OutputDir, cfg.ArtifactName+".xcarchive.zip")
+	ideDistributionLogsZipPath := filepath.Join(cfg.OutputDir, "xcodebuild.xcdistributionlogs.zip")
 
 	// cleanup
 	filesToCleanup := []string{
@@ -385,7 +318,7 @@ or use 'xcodebuild' as 'output_tool'.`)
 	fmt.Println()
 
 	isWorkspace := false
-	ext := filepath.Ext(configs.ProjectPath)
+	ext := filepath.Ext(absProjectPath)
 	if ext == ".xcodeproj" {
 		isWorkspace = false
 	} else if ext == ".xcworkspace" {
@@ -394,69 +327,65 @@ or use 'xcodebuild' as 'output_tool'.`)
 		fail("Project file extension should be .xcodeproj or .xcworkspace, but got: %s", ext)
 	}
 
-	archiveCmd := xcodebuild.NewArchiveCommand(configs.ProjectPath, isWorkspace)
-	archiveCmd.SetScheme(configs.Scheme)
-	archiveCmd.SetConfiguration(configs.Configuration)
+	archiveCmd := xcodebuild.NewCommandBuilder(absProjectPath, isWorkspace, xcodebuild.ArchiveAction)
+	archiveCmd.SetScheme(cfg.Scheme)
+	archiveCmd.SetConfiguration(cfg.Configuration)
 
-	if configs.ForceTeamID != "" {
-		log.Printf("Forcing Development Team: %s", configs.ForceTeamID)
-		archiveCmd.SetForceDevelopmentTeam(configs.ForceTeamID)
+	if cfg.ForceTeamID != "" {
+		log.Printf("Forcing Development Team: %s", cfg.ForceTeamID)
+		archiveCmd.SetForceDevelopmentTeam(cfg.ForceTeamID)
 	}
-	if configs.ForceProvisioningProfileSpecifier != "" {
-		log.Printf("Forcing Provisioning Profile Specifier: %s", configs.ForceProvisioningProfileSpecifier)
-		archiveCmd.SetForceProvisioningProfileSpecifier(configs.ForceProvisioningProfileSpecifier)
+	if cfg.ForceProvisioningProfileSpecifier != "" {
+		log.Printf("Forcing Provisioning Profile Specifier: %s", cfg.ForceProvisioningProfileSpecifier)
+		archiveCmd.SetForceProvisioningProfileSpecifier(cfg.ForceProvisioningProfileSpecifier)
 	}
-	if configs.ForceProvisioningProfile != "" {
-		log.Printf("Forcing Provisioning Profile: %s", configs.ForceProvisioningProfile)
-		archiveCmd.SetForceProvisioningProfile(configs.ForceProvisioningProfile)
+	if cfg.ForceProvisioningProfile != "" {
+		log.Printf("Forcing Provisioning Profile: %s", cfg.ForceProvisioningProfile)
+		archiveCmd.SetForceProvisioningProfile(cfg.ForceProvisioningProfile)
 	}
-	if configs.ForceCodeSignIdentity != "" {
-		log.Printf("Forcing Code Signing Identity: %s", configs.ForceCodeSignIdentity)
-		archiveCmd.SetForceCodeSignIdentity(configs.ForceCodeSignIdentity)
+	if cfg.ForceCodeSignIdentity != "" {
+		log.Printf("Forcing Code Signing Identity: %s", cfg.ForceCodeSignIdentity)
+		archiveCmd.SetForceCodeSignIdentity(cfg.ForceCodeSignIdentity)
 	}
 
-	if configs.IsCleanBuild == "yes" {
+	if cfg.IsCleanBuild {
 		archiveCmd.SetCustomBuildAction("clean")
 	}
 
+	archiveCmd.SetDisableIndexWhileBuilding(cfg.DisableIndexWhileBuilding)
 	archiveCmd.SetArchivePath(tmpArchivePath)
 
-	if configs.XcodebuildOptions != "" {
-		options, err := shellquote.Split(configs.XcodebuildOptions)
+	if cfg.XcodebuildOptions != "" {
+		options, err := shellquote.Split(cfg.XcodebuildOptions)
 		if err != nil {
-			fail("Failed to shell split XcodebuildOptions (%s), error: %s", configs.XcodebuildOptions)
+			fail("Failed to shell split XcodebuildOptions (%s), error: %s", cfg.XcodebuildOptions)
 		}
 		archiveCmd.SetCustomOptions(options)
 	}
 
-	if configs.OutputTool == "xcpretty" {
-		xcprettyCmd := xcpretty.New(archiveCmd)
+	var swiftPackagesPath string
+	if xcodeMajorVersion >= 11 {
+		var err error
+		if swiftPackagesPath, err = cache.SwiftPackagesPath(absProjectPath); err != nil {
+			fail("Failed to get Swift Packages path, error: %s", err)
+		}
+	}
 
-		logWithTimestamp(colorstring.Green, "$ %s", xcprettyCmd.PrintableCmd())
-		fmt.Println()
+	rawXcodebuildOut, err := runArchiveCommandWithRetry(archiveCmd, outputTool == "xcpretty", swiftPackagesPath)
+	if err != nil {
+		if outputTool == "xcpretty" {
+			log.Errorf("\nLast lines of the Xcode's build log:")
+			fmt.Println(stringutil.LastNLines(rawXcodebuildOut, 10))
 
-		if rawXcodebuildOut, err := xcprettyCmd.Run(); err != nil {
 			if err := utils.ExportOutputFileContent(rawXcodebuildOut, rawXcodebuildOutputLogPath, bitriseXcodeRawResultTextEnvKey); err != nil {
 				log.Warnf("Failed to export %s, error: %s", bitriseXcodeRawResultTextEnvKey, err)
 			} else {
-				log.Warnf(`If you can't find the reason of the error in the log, please check the raw-xcodebuild-output.log
-The log file is stored in $BITRISE_DEPLOY_DIR, and its full path
-is available in the $BITRISE_XCODE_RAW_RESULT_TEXT_PATH environment variable`)
+				log.Warnf(`You can find the last couple of lines of Xcode's build log above, but the full log is also available in the raw-xcodebuild-output.log
+	The log file is stored in $BITRISE_DEPLOY_DIR, and its full path is available in the $BITRISE_XCODE_RAW_RESULT_TEXT_PATH environment variable
+	(value: %s)`, rawXcodebuildOutputLogPath)
 			}
-
-			fail("Archive failed, error: %s", err)
 		}
-	} else {
-		logWithTimestamp(colorstring.Green, "$ %s", archiveCmd.PrintableCmd())
-		fmt.Println()
-
-		archiveRootCmd := archiveCmd.Command()
-		archiveRootCmd.SetStdout(os.Stdout)
-		archiveRootCmd.SetStderr(os.Stderr)
-
-		if err := archiveRootCmd.Run(); err != nil {
-			fail("Archive failed, error: %s", err)
-		}
+		fail("Archive failed, error: %s", err)
 	}
 
 	fmt.Println()
@@ -468,7 +397,14 @@ is available in the $BITRISE_XCODE_RAW_RESULT_TEXT_PATH environment variable`)
 		fail("No archive generated at: %s", tmpArchivePath)
 	}
 
-	if xcodeMajorVersion >= 9 && configs.UseDeprecatedExport == "yes" {
+	// Cache swift PM
+	if xcodeMajorVersion >= 11 && cfg.CacheLevel == "swift_packages" {
+		if err := cache.CollectSwiftPackages(absProjectPath); err != nil {
+			log.Warnf("Failed to mark swift packages for caching, error: %s", err)
+		}
+	}
+
+	if xcodeMajorVersion >= 9 && cfg.UseDeprecatedExport {
 		fail("Legacy export method (using '-exportFormat ipa' flag) is not supported from Xcode version 9")
 	}
 
@@ -510,7 +446,7 @@ is available in the $BITRISE_XCODE_RAW_RESULT_TEXT_PATH environment variable`)
 	log.Infof("Exporting ipa from the archive...")
 	fmt.Println()
 
-	if xcodeMajorVersion <= 6 || configs.UseDeprecatedExport == "yes" {
+	if xcodeMajorVersion <= 6 || cfg.UseDeprecatedExport {
 		log.Printf("Using legacy export")
 		/*
 			Get the name of the profile which was used for creating the archive
@@ -525,7 +461,7 @@ is available in the $BITRISE_XCODE_RAW_RESULT_TEXT_PATH environment variable`)
 		legacyExportCmd.SetExportPath(ipaPath)
 		legacyExportCmd.SetExportProvisioningProfileName(mainApplication.ProvisioningProfile.Name)
 
-		if configs.OutputTool == "xcpretty" {
+		if outputTool == "xcpretty" {
 			xcprettyCmd := xcpretty.New(legacyExportCmd)
 
 			logWithTimestamp(colorstring.Green, xcprettyCmd.PrintableCmd())
@@ -569,86 +505,78 @@ is available in the $BITRISE_XCODE_RAW_RESULT_TEXT_PATH environment variable`)
 			exportCodeSignStyle := ""
 			exportProfileMapping := map[string]string{}
 
-			if configs.ExportMethod == "auto-detect" {
+			if cfg.ExportMethod == "auto-detect" {
 				log.Printf("auto-detect export method specified")
 				exportMethod = archiveExportMethod
 
 				log.Printf("using the archive profile's (%s) export method: %s", mainApplication.ProvisioningProfile.Name, exportMethod)
 			} else {
-				parsedMethod, err := exportoptions.ParseMethod(configs.ExportMethod)
+				parsedMethod, err := exportoptions.ParseMethod(cfg.ExportMethod)
 				if err != nil {
 					fail("Failed to parse export options, error: %s", err)
 				}
 				exportMethod = parsedMethod
-				log.Printf("export-method specified: %s", configs.ExportMethod)
+				log.Printf("export-method specified: %s", cfg.ExportMethod)
+			}
+
+			bundleIDEntitlementsMap, err := utils.ProjectEntitlementsByBundleID(absProjectPath, cfg.Scheme, cfg.Configuration)
+			if err != nil {
+				fail(err.Error())
+			}
+
+			// iCloudContainerEnvironment: If the app is using CloudKit, this configures the "com.apple.developer.icloud-container-environment" entitlement.
+			// Available options vary depending on the type of provisioning profile used, but may include: Development and Production.
+			usesCloudKit := false
+			for _, entitlements := range bundleIDEntitlementsMap {
+				if entitlements == nil {
+					continue
+				}
+
+				services, ok := entitlements.GetStringArray("com.apple.developer.icloud-services")
+				if ok {
+					usesCloudKit = sliceutil.IsStringInSlice("CloudKit", services) || sliceutil.IsStringInSlice("CloudDocuments", services)
+					if usesCloudKit {
+						break
+					}
+				}
+			}
+
+			// From Xcode 9 iCloudContainerEnvironment is required for every export method, before that version only for non app-store exports.
+			var iCloudContainerEnvironment string
+			if usesCloudKit && (xcodeMajorVersion >= 9 || exportMethod != exportoptions.MethodAppStore) {
+				if exportMethod == exportoptions.MethodAppStore {
+					iCloudContainerEnvironment = "Production"
+				} else if cfg.ICloudContainerEnvironment == "" {
+					fail("project uses CloudKit, but iCloud container environment input not specified")
+				} else {
+					iCloudContainerEnvironment = cfg.ICloudContainerEnvironment
+				}
 			}
 
 			if xcodeMajorVersion >= 9 {
 				log.Printf("xcode major version > 9, generating provisioningProfiles node")
 
-				user := os.Getenv("USER")
-				targetCodeSignInfoMap, err := xcodeproj.ResolveCodeSignInfo(configs.ProjectPath, configs.Scheme, user)
-				if err != nil {
-					log.Errorf("Failed to create scheme - target mapping, error: %s", err)
-					log.Errorf("Please contact us on bitrise on-site-chat and")
-					log.Errorf("attach your failed build url and your project file(s) (.xcworkspace and/or .xcodeproj file(s)),")
-					log.Errorf("to let us identify the issue.")
-					os.Exit(1)
-				}
-
-				bundleIDs := []string{}
-				bundleIDTargetMap := map[string]string{}
-				bundleIDEntitlementsMap := map[string]plistutil.PlistData{}
-
 				fmt.Println()
-				log.Printf("Target - CodeSignInfo mapping:")
-				for target, info := range targetCodeSignInfoMap {
-					log.Printf(target)
-					log.Printf("  bundleIdentifier: %s", info.BundleIdentifier)
-					log.Printf("  developmentTeam: %s", info.DevelopmentTeam)
-					log.Printf("  codeSignIdentity: %s", info.CodeSignIdentity)
+				log.Printf("Target Bundle ID - Entitlements map")
+				var bundleIDs []string
+				for bundleID, entitlements := range bundleIDEntitlementsMap {
+					bundleIDs = append(bundleIDs, bundleID)
 
-					profile := info.ProvisioningProfileSpecifier
-					if profile == "" {
-						profile = info.ProvisioningProfile
-					}
-					log.Printf("  profile: %s", profile)
-
-					bundleIDs = append(bundleIDs, info.BundleIdentifier)
-					bundleIDTargetMap[info.BundleIdentifier] = target
-
-					if info.CodeSignEntitlementsPath == "" {
-						continue
-					}
-
-					if exist, err := pathutil.IsPathExists(info.CodeSignEntitlementsPath); err != nil {
-						log.Warnf("Failed to check if target (%s) entitlements file exist, error: %s", target, err)
-						continue
-					} else if !exist {
-						log.Warnf("Target (%s) entitlements file not exist at: %s", target, info.CodeSignEntitlementsPath)
-						continue
-					}
-
-					entitlements, err := plistutil.NewPlistDataFromFile(info.CodeSignEntitlementsPath)
-					if err != nil {
-						log.Warnf("Failed to parse target (%s) entitlements", target)
-						continue
-					}
-
-					bundleIDEntitlementsMap[info.BundleIdentifier] = entitlements
-
-					log.Printf("  Entitlements:")
+					entitlementKeys := []string{}
 					for key := range entitlements {
-						log.Printf("  - %s", key)
+						entitlementKeys = append(entitlementKeys, key)
 					}
+					log.Printf("%s: %s", bundleID, entitlementKeys)
 				}
+
 				fmt.Println()
+				log.Printf("Resolving CodeSignGroups...")
 
 				certs, err := certificateutil.InstalledCodesigningCertificateInfos()
 				if err != nil {
 					fail("Failed to get installed certificates, error: %s", err)
 				}
-				certs = certificateutil.FilterValidCertificateInfos(certs)
+				certs = certificateutil.FilterValidCertificateInfos(certs).ValidCertificates
 
 				log.Debugf("Installed certificates:")
 				for _, certInfo := range certs {
@@ -671,50 +599,94 @@ is available in the $BITRISE_XCODE_RAW_RESULT_TEXT_PATH environment variable`)
 					log.Errorf("Failed to find code signing groups for specified export method (%s)", exportMethod)
 				}
 
+				log.Debugf("\nGroups:")
 				for _, group := range codeSignGroups {
 					log.Debugf(group.String())
 				}
 
-				filters := []export.SelectableCodeSignGroupFilter{}
-
 				if len(bundleIDEntitlementsMap) > 0 {
 					log.Warnf("Filtering CodeSignInfo groups for target capabilities")
-					filters = append(filters,
-						export.CreateEntitlementsSelectableCodeSignGroupFilter(bundleIDEntitlementsMap))
+
+					codeSignGroups = export.FilterSelectableCodeSignGroups(codeSignGroups, export.CreateEntitlementsSelectableCodeSignGroupFilter(bundleIDEntitlementsMap))
+
+					log.Debugf("\nGroups after filtering for target capabilities:")
+					for _, group := range codeSignGroups {
+						log.Debugf(group.String())
+					}
 				}
 
 				log.Warnf("Filtering CodeSignInfo groups for export method")
-				filters = append(filters,
-					export.CreateExportMethodSelectableCodeSignGroupFilter(exportMethod))
 
-				if configs.TeamID != "" {
-					log.Warnf("Export TeamID specified: %s, filtering CodeSignInfo groups...", configs.TeamID)
-					filters = append(filters,
-						export.CreateTeamSelectableCodeSignGroupFilter(configs.TeamID))
+				codeSignGroups = export.FilterSelectableCodeSignGroups(codeSignGroups, export.CreateExportMethodSelectableCodeSignGroupFilter(exportMethod))
+
+				log.Debugf("\nGroups after filtering for export method:")
+				for _, group := range codeSignGroups {
+					log.Debugf(group.String())
+				}
+
+				if cfg.TeamID != "" {
+					log.Warnf("Export TeamID specified: %s, filtering CodeSignInfo groups...", cfg.TeamID)
+
+					codeSignGroups = export.FilterSelectableCodeSignGroups(codeSignGroups, export.CreateTeamSelectableCodeSignGroupFilter(cfg.TeamID))
+
+					log.Debugf("\nGroups after filtering for team ID:")
+					for _, group := range codeSignGroups {
+						log.Debugf(group.String())
+					}
 				}
 
 				if !archiveCodeSignIsXcodeManaged {
 					log.Warnf("App was signed with NON xcode managed profile when archiving,\n" +
 						"only NOT xcode managed profiles are allowed to sign when exporting the archive.\n" +
 						"Removing xcode managed CodeSignInfo groups")
-					filters = append(filters, export.CreateNotXcodeManagedSelectableCodeSignGroupFilter())
+
+					codeSignGroups = export.FilterSelectableCodeSignGroups(codeSignGroups, export.CreateNotXcodeManagedSelectableCodeSignGroupFilter())
+
+					log.Debugf("\nGroups after filtering for NOT Xcode managed profiles:")
+					for _, group := range codeSignGroups {
+						log.Debugf(group.String())
+					}
 				}
 
-				codeSignGroups = export.FilterSelectableCodeSignGroups(codeSignGroups, filters...)
-
 				defaultProfileURL := os.Getenv("BITRISE_DEFAULT_PROVISION_URL")
-				if configs.TeamID == "" && defaultProfileURL != "" {
+				if cfg.TeamID == "" && defaultProfileURL != "" {
 					if defaultProfile, err := utils.GetDefaultProvisioningProfile(); err == nil {
 						log.Debugf("\ndefault profile: %v\n", defaultProfile)
 						filteredCodeSignGroups := export.FilterSelectableCodeSignGroups(codeSignGroups,
 							export.CreateExcludeProfileNameSelectableCodeSignGroupFilter(defaultProfile.Name))
 						if len(filteredCodeSignGroups) > 0 {
 							codeSignGroups = filteredCodeSignGroups
+
+							log.Debugf("\nGroups after removing default profile:")
+							for _, group := range codeSignGroups {
+								log.Debugf(group.String())
+							}
 						}
 					}
 				}
 
-				iosCodeSignGroups := export.CreateIosCodeSignGroups(codeSignGroups)
+				var iosCodeSignGroups []export.IosCodeSignGroup
+
+				for _, selectable := range codeSignGroups {
+					bundleIDProfileMap := map[string]profileutil.ProvisioningProfileInfoModel{}
+					for bundleID, profiles := range selectable.BundleIDProfilesMap {
+						if len(profiles) > 0 {
+							bundleIDProfileMap[bundleID] = profiles[0]
+						} else {
+							log.Warnf("No profile available to sign (%s) target!", bundleID)
+						}
+					}
+
+					iosCodeSignGroups = append(iosCodeSignGroups, *export.NewIOSGroup(selectable.Certificate, bundleIDProfileMap))
+				}
+
+				log.Debugf("\nFiltered groups:")
+				for i, group := range iosCodeSignGroups {
+					log.Debugf("Group #%d:", i)
+					for bundleID, profile := range group.BundleIDProfileMap() {
+						log.Debugf(" - %s: %s (%s)", bundleID, profile.Name, profile.UUID)
+					}
+				}
 
 				if len(iosCodeSignGroups) > 0 {
 					codeSignGroup := export.IosCodeSignGroup{}
@@ -726,10 +698,10 @@ is available in the $BITRISE_XCODE_RAW_RESULT_TEXT_PATH environment variable`)
 						log.Warnf("Multiple code signing groups found! Using the first code signing group")
 					}
 
-					exportTeamID = codeSignGroup.Certificate.TeamID
-					exportCodeSignIdentity = codeSignGroup.Certificate.CommonName
+					exportTeamID = codeSignGroup.Certificate().TeamID
+					exportCodeSignIdentity = codeSignGroup.Certificate().CommonName
 
-					for bundleID, profileInfo := range codeSignGroup.BundleIDProfileMap {
+					for bundleID, profileInfo := range codeSignGroup.BundleIDProfileMap() {
 						exportProfileMapping[bundleID] = profileInfo.Name
 
 						isXcodeManaged := profileutil.IsXcodeManaged(profileInfo.Name)
@@ -753,7 +725,7 @@ is available in the $BITRISE_XCODE_RAW_RESULT_TEXT_PATH environment variable`)
 			var exportOpts exportoptions.ExportOptions
 			if exportMethod == exportoptions.MethodAppStore {
 				options := exportoptions.NewAppStoreOptions()
-				options.UploadBitcode = (configs.UploadBitcode == "yes")
+				options.UploadBitcode = cfg.UploadBitcode
 
 				if xcodeMajorVersion >= 9 {
 					options.BundleIDProvisioningProfileMapping = exportProfileMapping
@@ -769,10 +741,14 @@ is available in the $BITRISE_XCODE_RAW_RESULT_TEXT_PATH environment variable`)
 					}
 				}
 
+				if iCloudContainerEnvironment != "" {
+					options.ICloudContainerEnvironment = exportoptions.ICloudContainerEnvironment(iCloudContainerEnvironment)
+				}
+
 				exportOpts = options
 			} else {
 				options := exportoptions.NewNonAppStoreOptions(exportMethod)
-				options.CompileBitcode = (configs.CompileBitcode == "yes")
+				options.CompileBitcode = cfg.CompileBitcode
 
 				if xcodeMajorVersion >= 9 {
 					options.BundleIDProvisioningProfileMapping = exportProfileMapping
@@ -786,6 +762,10 @@ is available in the $BITRISE_XCODE_RAW_RESULT_TEXT_PATH environment variable`)
 
 						options.SigningStyle = "manual"
 					}
+				}
+
+				if iCloudContainerEnvironment != "" {
+					options.ICloudContainerEnvironment = exportoptions.ICloudContainerEnvironment(iCloudContainerEnvironment)
 				}
 
 				exportOpts = options
@@ -813,7 +793,7 @@ is available in the $BITRISE_XCODE_RAW_RESULT_TEXT_PATH environment variable`)
 		exportCmd.SetExportDir(tmpDir)
 		exportCmd.SetExportOptionsPlist(exportOptionsPath)
 
-		if configs.OutputTool == "xcpretty" {
+		if outputTool == "xcpretty" {
 			xcprettyCmd := xcpretty.New(exportCmd)
 
 			logWithTimestamp(colorstring.Green, xcprettyCmd.PrintableCmd())
@@ -915,7 +895,7 @@ is available in the $BITRISE_IDEDISTRIBUTION_LOGS_PATH environment variable`)
 					}
 
 					base := filepath.Base(pth)
-					deployPth := filepath.Join(configs.OutputDir, base)
+					deployPth := filepath.Join(cfg.OutputDir, base)
 
 					if err := command.CopyFile(pth, deployPth); err != nil {
 						fail("Failed to copy (%s) -> (%s), error: %s", pth, ipaPath, err)
@@ -939,13 +919,11 @@ is available in the $BITRISE_IDEDISTRIBUTION_LOGS_PATH environment variable`)
 
 	log.Donef("The xcarchive path is now available in the Environment Variable: %s (value: %s)", bitriseXCArchivePthEnvKey, tmpArchivePath)
 
-	if configs.IsExportXcarchiveZip == "yes" {
-		if err := utils.ExportOutputDirAsZip(tmpArchivePath, archiveZipPath, bitriseXCArchiveZipPthEnvKey); err != nil {
-			fail("Failed to export %s, error: %s", bitriseXCArchiveZipPthEnvKey, err)
-		}
-
-		log.Donef("The xcarchive zip path is now available in the Environment Variable: %s (value: %s)", bitriseXCArchiveZipPthEnvKey, archiveZipPath)
+	if err := utils.ExportOutputDirAsZip(tmpArchivePath, archiveZipPath, bitriseXCArchiveZipPthEnvKey); err != nil {
+		fail("Failed to export %s, error: %s", bitriseXCArchiveZipPthEnvKey, err)
 	}
+
+	log.Donef("The xcarchive zip path is now available in the Environment Variable: %s (value: %s)", bitriseXCArchiveZipPthEnvKey, archiveZipPath)
 
 	// Export .app
 	fmt.Println()
@@ -988,7 +966,7 @@ is available in the $BITRISE_IDEDISTRIBUTION_LOGS_PATH environment variable`)
 			fail("Failed to copy (%s) -> (%s), error: %s", appDSYM, dsymDir, err)
 		}
 
-		if configs.ExportAllDsyms == "yes" {
+		if cfg.ExportAllDsyms {
 			for _, dsym := range frameworkDSYMs {
 				if err := command.CopyDir(dsym, dsymDir, false); err != nil {
 					fail("Failed to copy (%s) -> (%s), error: %s", dsym, dsymDir, err)
