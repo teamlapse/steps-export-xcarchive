@@ -3,7 +3,15 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:b27850118cd70ccd7966d1943a9c3817365bc251b606aff5f12609cf21adf29b"
+  digest = "1:65497df2301289c26765c4cf8fcd4709de190dd620ea822ae2dc67edfc598307"
+  name = "github.com/bitrise-io/go-steputils"
+  packages = ["stepconf"]
+  pruneopts = "UT"
+  revision = "3c98d95a94d51624a26e99419d0fc03d2aab0055"
+
+[[projects]]
+  branch = "master"
+  digest = "1:17a65ad25fea9e5f9d5c1330a586fcba3e8311dfe0665084dfc0e638d316e896"
   name = "github.com/bitrise-io/go-utils"
   packages = [
     "colorstring",
@@ -11,18 +19,20 @@
     "errorutil",
     "fileutil",
     "log",
+    "parseutil",
     "pathutil",
     "pkcs12",
     "pkcs12/internal/rc2",
+    "pointers",
     "sliceutil",
     "ziputil",
   ]
-  pruneopts = ""
+  pruneopts = "UT"
   revision = "5067a2a682f21030f379f88e853b9e0734a24516"
 
 [[projects]]
   branch = "master"
-  digest = "1:a5f12c062c76eac7bbcdd12e0383125961a24185ec5da378aaf67d22a46915fd"
+  digest = "1:7b39dc75253b74b40d1d47a1c248b740db8b17779da6a90f95ea6a070905cf47"
   name = "github.com/bitrise-io/go-xcode"
   packages = [
     "certificateutil",
@@ -35,20 +45,12 @@
     "xcarchive",
     "xcodebuild",
   ]
-  pruneopts = ""
-  revision = "19cbfe6430acc193d779847a13be0b8585d866c1"
-
-[[projects]]
-  digest = "1:50c13929bd44d6ce9fc9042ea1b3b78f5906a9cee7ce301f334fd053e54990a7"
-  name = "github.com/bitrise-io/steps-xcode-archive"
-  packages = ["utils"]
-  pruneopts = ""
-  revision = "d25b478ae7b83f6b6d2353014381dd17e801147c"
-  version = "2.7.0"
+  pruneopts = "UT"
+  revision = "95bf1e5fb205f81972e2450d227fa80748a5b322"
 
 [[projects]]
   branch = "master"
-  digest = "1:593cabe6c96ceb03d9d81a94001a6b9e4317f3e6ff524b7af8d4a605bec3e33a"
+  digest = "1:85c502298a8078ffdfee516cfb59bb5272c3adca032d1d26001da41042275851"
   name = "github.com/bitrise-io/xcode-project"
   packages = [
     ".",
@@ -59,35 +61,43 @@
     "xcscheme",
     "xcworkspace",
   ]
-  pruneopts = ""
-  revision = "a4e01d69cacc7dd9acbe8fb987dba69c9ce01b1c"
+  pruneopts = "UT"
+  revision = "389cf29e41c71dc02c83959c6fac72e8d476766a"
+
+[[projects]]
+  digest = "1:eab1c9dd3b31f9ac6a61501a668c8e529d5ea224e6533a2f6bc9b12f1bdaa002"
+  name = "github.com/bitrise-steplib/steps-xcode-archive"
+  packages = ["utils"]
+  pruneopts = "UT"
+  revision = "8b2aa80d6c8dea5055a9ffe213a6733ca1c99b95"
+  version = "2.7.1"
 
 [[projects]]
   branch = "master"
-  digest = "1:79f0eecec67bc768713829e38fb5b7a198d7fee2ad1019d2d7adf0b3de8520ac"
+  digest = "1:0bd05495dbd0567480e48eac9e6602d87875a8747b13c3c0fcb7c83c7c921776"
   name = "github.com/fullsailor/pkcs7"
   packages = ["."]
-  pruneopts = ""
-  revision = "a009d8d7de53d9503c797cb8ec66fa3b21eed209"
+  pruneopts = "UT"
+  revision = "d7302db945fa6ea264fb79d8e13e931ea514a602"
 
 [[projects]]
-  digest = "1:1d7e1867c49a6dd9856598ef7c3123604ea3daabf5b83f303ff457bcbc410b1d"
+  digest = "1:cf31692c14422fa27c83a05292eb5cbe0fb2775972e8f1f8446a71549bd8980b"
   name = "github.com/pkg/errors"
   packages = ["."]
-  pruneopts = ""
+  pruneopts = "UT"
   revision = "ba968bfe8b2f7e042a574c888954fccecfa385b4"
   version = "v0.8.1"
 
 [[projects]]
-  digest = "1:4244255905cb95c3c98894d671367f84a6292608ae528936fe46ba9c86f68393"
+  digest = "1:6baa565fe16f8657cf93469b2b8a6c61a277827734400d27e44d589547297279"
   name = "github.com/ryanuber/go-glob"
   packages = ["."]
-  pruneopts = ""
+  pruneopts = "UT"
   revision = "51a8f68e6c24dc43f1e371749c89a267de4ebc53"
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:740b51a55815493a8d0f2b1e0d0ae48fe48953bf7eaf3fcc4198823bf67768c0"
+  digest = "1:1093f2eb4b344996604f7d8b29a16c5b22ab9e1b25652140d3fede39f640d5cd"
   name = "golang.org/x/text"
   packages = [
     "internal/gen",
@@ -97,22 +107,23 @@
     "unicode/cldr",
     "unicode/norm",
   ]
-  pruneopts = ""
+  pruneopts = "UT"
   revision = "342b2e1fbaa52c93f31447ad2c6abc048c63e475"
   version = "v0.3.2"
 
 [[projects]]
   branch = "master"
-  digest = "1:ac8b19a1e2c4c474da6dfbc28db0d8d17ee1e944fe8167db7208b6caccfbfc24"
+  digest = "1:c10265d5a71326618d37e97169eddb3582f78e8ac7dcf87403b4cf619efd519a"
   name = "howett.net/plist"
   packages = ["."]
-  pruneopts = ""
-  revision = "233df3c4f07b0c562da0e8a6fb850681ac49bb90"
+  pruneopts = "UT"
+  revision = "591f970eefbbeb04d7b37f334a0c4c3256e32876"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/bitrise-io/go-steputils/stepconf",
     "github.com/bitrise-io/go-utils/command",
     "github.com/bitrise-io/go-utils/fileutil",
     "github.com/bitrise-io/go-utils/log",
@@ -124,7 +135,8 @@
     "github.com/bitrise-io/go-xcode/utility",
     "github.com/bitrise-io/go-xcode/xcarchive",
     "github.com/bitrise-io/go-xcode/xcodebuild",
-    "github.com/bitrise-io/steps-xcode-archive/utils",
+    "github.com/bitrise-steplib/steps-xcode-archive/utils",
+    "howett.net/plist",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

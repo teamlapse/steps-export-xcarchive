@@ -18,16 +18,8 @@ project_type_tags:
   - xamarin
 type_tags:
   - utility
-is_requires_admin_user: true
 is_always_run: false
 is_skippable: false
-run_if: ""
-deps:
-  brew:
-  - name: go
-  apt_get:
-  - name: golang
-    bin_name: go
 toolkit:
   go:
     package_name: github.com/bitrise-steplib/steps-export-xcarchive
@@ -116,17 +108,12 @@ inputs:
       title: Use legacy ipa export method?
       description: |-
         If this input is set to `yes`, step will use legacy ipa export method.
+
+        The embedded provisining profile will be used.
       value_options:
       - "yes"
       - "no"
       is_required: true
-  - legacy_export_provisioning_profile_name:
-    opts:
-      title: Specify Provisioning Profile name to use by export
-      description: |-
-        This input will be used if `use_legacy_export` is set to `"yes"`.
-
-        If this input is empty the step will use the embedded provisining profile.
   - verbose_log: "yes"
     opts:
       category: Debug

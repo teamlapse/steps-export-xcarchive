@@ -2,13 +2,13 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/bitrise-io/go-steputils/stepconf"
 	"github.com/bitrise-io/go-utils/command"
 	"github.com/bitrise-io/go-utils/fileutil"
 	"github.com/bitrise-io/go-utils/log"
@@ -20,7 +20,8 @@ import (
 	"github.com/bitrise-io/go-xcode/utility"
 	"github.com/bitrise-io/go-xcode/xcarchive"
 	"github.com/bitrise-io/go-xcode/xcodebuild"
-	"github.com/bitrise-io/steps-xcode-archive/utils"
+	"github.com/bitrise-steplib/steps-xcode-archive/utils"
+	"howett.net/plist"
 )
 
 const (
@@ -29,90 +30,48 @@ const (
 	bitriseIDEDistributionLogsPthEnvKey = "BITRISE_IDEDISTRIBUTION_LOGS_PATH"
 )
 
-// ConfigsModel ...
-type ConfigsModel struct {
-	ArchivePath string
+// Config ...
+type Config struct {
+	ArchivePath string `env:"archive_path,dir"`
 
-	ExportMethod                    string
-	UploadBitcode                   string
-	CompileBitcode                  string
-	TeamID                          string
-	CustomExportOptionsPlistContent string
+	ExportMethod                    string `env:"export_method,opt[auto-detect,app-store,ad-hoc,enterprise,development]"`
+	UploadBitcode                   bool   `env:"upload_bitcode,opt[yes,no]"`
+	CompileBitcode                  bool   `env:"compile_bitcode,opt[yes,no]"`
+	TeamID                          string `env:"team_id"`
+	CustomExportOptionsPlistContent string `env:"custom_export_options_plist_content"`
 
-	UseLegacyExport                     string
-	LegacyExportProvisioningProfileName string
+	UseLegacyExport bool `env:"use_legacy_export,opt[yes,no]"`
 
-	DeployDir  string
-	VerboseLog string
+	DeployDir  string `env:"BITRISE_DEPLOY_DIR"`
+	VerboseLog bool   `env:"verbose_log,opt[yes,no]"`
 }
 
-func createConfigsModelFromEnvs() ConfigsModel {
-	return ConfigsModel{
-		ArchivePath: os.Getenv("archive_path"),
-
-		ExportMethod:                    os.Getenv("export_method"),
-		UploadBitcode:                   os.Getenv("upload_bitcode"),
-		CompileBitcode:                  os.Getenv("compile_bitcode"),
-		TeamID:                          os.Getenv("team_id"),
-		CustomExportOptionsPlistContent: os.Getenv("custom_export_options_plist_content"),
-
-		UseLegacyExport:                     os.Getenv("use_legacy_export"),
-		LegacyExportProvisioningProfileName: os.Getenv("legacy_export_provisioning_profile_name"),
-
-		DeployDir:  os.Getenv("BITRISE_DEPLOY_DIR"),
-		VerboseLog: os.Getenv("verbose_log"),
-	}
-}
-
-func (configs ConfigsModel) print() {
-	log.Infof("Configs:")
-	log.Printf("- ArchivePath: %s", configs.ArchivePath)
-	log.Printf("- ExportMethod: %s", configs.ExportMethod)
+func (configs *Config) validate() error {
 	if configs.ExportMethod == "auto-detect" {
 		exportMethods := []exportoptions.Method{exportoptions.MethodAppStore, exportoptions.MethodAdHoc, exportoptions.MethodEnterprise, exportoptions.MethodDevelopment}
 		log.Warnf("  Export method: auto-detect is DEPRECATED, use a direct export method %s", exportMethods)
 		fmt.Println()
 	}
-	log.Printf("- UploadBitcode: %s", configs.UploadBitcode)
-	log.Printf("- CompileBitcode: %s", configs.CompileBitcode)
-	log.Printf("- TeamID: %s", configs.TeamID)
 
-	log.Infof("Experimental Configs:")
-	log.Printf("- UseLegacyExport: %s", configs.UseLegacyExport)
-	log.Printf("- LegacyExportProvisioningProfileName: %s", configs.LegacyExportProvisioningProfileName)
-	log.Printf("- CustomExportOptionsPlistContent:")
+	// Validate CustomExportOptionsPlistContent
+	trimmedExportOptions := strings.TrimSpace(configs.CustomExportOptionsPlistContent)
+	if configs.CustomExportOptionsPlistContent != trimmedExportOptions {
+		configs.CustomExportOptionsPlistContent = trimmedExportOptions
+		log.Warnf("CustomExportOptionsPlistContent contains leading and trailing white space, removed:")
+		log.Printf(configs.CustomExportOptionsPlistContent)
+		fmt.Println()
+	}
 	if configs.CustomExportOptionsPlistContent != "" {
-		fmt.Println(configs.CustomExportOptionsPlistContent)
+		var options map[string]interface{}
+		if _, err := plist.Unmarshal([]byte(configs.CustomExportOptionsPlistContent), &options); err != nil {
+			return fmt.Errorf("issue with input CustomExportOptionsPlistContent: %s", err.Error())
+		}
 	}
 
-	log.Infof("Other Configs:")
-	log.Printf("- DeployDir: %s", configs.DeployDir)
-	log.Printf("- VerboseLog: %s", configs.VerboseLog)
-}
-
-func (configs ConfigsModel) validate() error {
-	if configs.ArchivePath == "" {
-		return errors.New("no ArchivePath specified")
-	}
-
-	if exist, err := pathutil.IsPathExists(configs.ArchivePath); err != nil {
-		return fmt.Errorf("failed to check if ArchivePath exist at: %s, error: %s", configs.ArchivePath, err)
-	} else if !exist {
-		return fmt.Errorf("ArchivePath not exist at: %s", configs.ArchivePath)
-	}
-
-	if configs.ExportMethod == "" {
-		return errors.New("no ExportMethod specified")
-	}
-	if configs.UploadBitcode == "" {
-		return errors.New("no UploadBitcode specified")
-	}
-	if configs.CompileBitcode == "" {
-		return errors.New("no CompileBitcode specified")
-	}
-
-	if configs.UseLegacyExport == "" {
-		return errors.New("no UseLegacyExport specified")
+	trimmedTeamID := strings.TrimSpace(configs.TeamID)
+	if configs.TeamID != trimmedTeamID {
+		configs.TeamID = trimmedTeamID
+		log.Warnf("TeamID contains leading and trailing white space, removed: %s", configs.TeamID)
 	}
 
 	return nil
@@ -383,16 +342,19 @@ func generateExportOptionsPlist(exportMethodStr, teamID string, uploadBitcode, c
 }
 
 func main() {
-	configs := createConfigsModelFromEnvs()
-
+	var configs Config
+	if err := stepconf.Parse(&configs); err != nil {
+		fail("Issue with input: %s", err)
+	}
+	stepconf.Print(configs)
 	fmt.Println()
-	configs.print()
-
 	if err := configs.validate(); err != nil {
 		fail("Issue with input: %s", err)
 	}
 
-	log.SetEnableDebugLog(configs.VerboseLog == "yes")
+	log.SetEnableDebugLog(configs.VerboseLog)
+
+	log.Infof("Step determined configs:")
 
 	xcodebuildVersion, err := utility.GetXcodeVersion()
 	if err != nil {
@@ -400,16 +362,8 @@ func main() {
 	}
 	log.Printf("- xcodebuildVersion: %s (%s)", xcodebuildVersion.Version, xcodebuildVersion.BuildVersion)
 
-	if xcodebuildVersion.MajorVersion >= 9 && configs.UseLegacyExport == "yes" {
+	if xcodebuildVersion.MajorVersion >= 9 && configs.UseLegacyExport {
 		fail("Legacy export method (using '-exportFormat ipa' flag) is not supported from Xcode version 9")
-	}
-
-	// Validation CustomExportOptionsPlistContent
-	customExportOptionsPlistContent := strings.TrimSpace(configs.CustomExportOptionsPlistContent)
-	if customExportOptionsPlistContent != configs.CustomExportOptionsPlistContent {
-		fmt.Println()
-		log.Warnf("CustomExportOptionsPlistContent is stripped to remove spaces and new lines:")
-		log.Printf(customExportOptionsPlistContent)
 	}
 
 	archiveExt := filepath.Ext(configs.ArchivePath)
@@ -446,7 +400,7 @@ func main() {
 	log.Printf("xcode managed profile: %v", archiveCodeSignIsXcodeManaged)
 	fmt.Println()
 
-	if xcodebuildVersion.MajorVersion <= 6 || configs.UseLegacyExport == "yes" {
+	if xcodebuildVersion.MajorVersion <= 6 || configs.UseLegacyExport {
 		log.Infof("Using legacy export method...")
 
 		legacyExportCmd := xcodebuild.NewLegacyExportCommand()
@@ -464,15 +418,15 @@ func main() {
 	} else {
 		log.Infof("Exporting with export options...")
 
-		if customExportOptionsPlistContent != "" {
+		if configs.CustomExportOptionsPlistContent != "" {
 			log.Printf("Custom export options content provided, using it:")
-			fmt.Println(customExportOptionsPlistContent)
+			fmt.Println(configs.CustomExportOptionsPlistContent)
 
-			if err := fileutil.WriteStringToFile(exportOptionsPath, customExportOptionsPlistContent); err != nil {
+			if err := fileutil.WriteStringToFile(exportOptionsPath, configs.CustomExportOptionsPlistContent); err != nil {
 				fail("Failed to write export options to file, error: %s", err)
 			}
 		} else {
-			exportOptionsContent, err := generateExportOptionsPlist(configs.ExportMethod, configs.TeamID, configs.UploadBitcode == "true", configs.CompileBitcode == "true", xcodebuildVersion.MajorVersion, archive)
+			exportOptionsContent, err := generateExportOptionsPlist(configs.ExportMethod, configs.TeamID, configs.UploadBitcode, configs.CompileBitcode, xcodebuildVersion.MajorVersion, archive)
 			if err != nil {
 				fail("Failed to generate export options, error: %s", err)
 			}
