@@ -85,6 +85,17 @@ inputs:
         Format example:
 
         - `1MZX23ABCD4`
+  - product: "app"
+    opts:
+      title: "Select a product to distribute"
+      summary: ""
+      description: |-
+        Describes which product to export.   
+        Possible options are App or App Clip.
+      value_options:
+      - "app"
+      - "app-clip"
+      is_required: true
   - custom_export_options_plist_content:
     opts:
       title: "Custom export options plist content"
