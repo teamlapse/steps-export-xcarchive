@@ -411,8 +411,6 @@ func main() {
 	archiveExt := filepath.Ext(configs.ArchivePath)
 	archiveName := filepath.Base(configs.ArchivePath)
 	archiveName = strings.TrimSuffix(archiveName, archiveExt)
-
-	ipaPath := filepath.Join(configs.DeployDir, archiveName+".ipa")
 	exportOptionsPath := filepath.Join(configs.DeployDir, "export_options.plist")
 
 	dsymZipPath := filepath.Join(configs.DeployDir, archiveName+".dSYM.zip")
@@ -454,6 +452,7 @@ func main() {
 
 	if xcodebuildVersion.MajorVersion <= 6 || configs.UseLegacyExport {
 		log.Infof("Using legacy export method...")
+		ipaPath := filepath.Join(configs.DeployDir, archiveName+".ipa")
 
 		legacyExportCmd := xcodebuild.NewLegacyExportCommand()
 		legacyExportCmd.SetExportFormat("ipa")
@@ -521,6 +520,7 @@ is available in the $BITRISE_IDEDISTRIBUTION_LOGS_PATH environment variable`)
 		}
 
 		// Search for ipa
+		exportedIPAPath := ""
 		pattern := filepath.Join(tmpDir, "*.ipa")
 		ipas, err := filepath.Glob(pattern)
 		if err != nil {
@@ -530,8 +530,9 @@ is available in the $BITRISE_IDEDISTRIBUTION_LOGS_PATH environment variable`)
 		if len(ipas) == 0 {
 			fail("No ipa found with pattern: %s", pattern)
 		} else if len(ipas) == 1 {
-			if err := command.CopyFile(ipas[0], ipaPath); err != nil {
-				fail("Failed to copy (%s) -> (%s), error: %s", ipas[0], ipaPath, err)
+			exportedIPAPath = filepath.Join(configs.DeployDir, filepath.Base(ipas[0]))
+			if err := command.CopyFile(ipas[0], exportedIPAPath); err != nil {
+				fail("Failed to copy (%s) -> (%s), error: %s", ipas[0], exportedIPAPath, err)
 			}
 		} else {
 			log.Warnf("More than 1 .ipa file found")
@@ -541,17 +542,17 @@ is available in the $BITRISE_IDEDISTRIBUTION_LOGS_PATH environment variable`)
 				deployPth := filepath.Join(configs.DeployDir, base)
 
 				if err := command.CopyFile(ipa, deployPth); err != nil {
-					fail("Failed to copy (%s) -> (%s), error: %s", ipas[0], ipaPath, err)
+					fail("Failed to copy (%s) -> (%s), error: %s", ipas[0], exportedIPAPath, err)
 				}
-				ipaPath = ipa
+				exportedIPAPath = ipa
 			}
 		}
 
-		if err := utils.ExportOutputFile(ipaPath, ipaPath, bitriseIPAPthEnvKey); err != nil {
+		if err := utils.ExportOutputFile(exportedIPAPath, exportedIPAPath, bitriseIPAPthEnvKey); err != nil {
 			fail("Failed to export %s, error: %s", bitriseIPAPthEnvKey, err)
 		}
 
-		log.Donef("The ipa path is now available in the Environment Variable: %s (value: %s)", bitriseIPAPthEnvKey, ipaPath)
+		log.Donef("The ipa path is now available in the Environment Variable: %s (value: %s)", bitriseIPAPthEnvKey, exportedIPAPath)
 
 		appDSYM, _, err := archive.FindDSYMs()
 		if err != nil {
