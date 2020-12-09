@@ -542,7 +542,7 @@ is available in the $BITRISE_IDEDISTRIBUTION_LOGS_PATH environment variable`)
 				deployPth := filepath.Join(configs.DeployDir, base)
 
 				if err := command.CopyFile(ipa, deployPth); err != nil {
-					fail("Failed to copy (%s) -> (%s), error: %s", ipas[0], exportedIPAPath, err)
+					fail("Failed to copy (%s) -> (%s), error: %s", ipas[0], ipa, err)
 				}
 				exportedIPAPath = ipa
 			}
