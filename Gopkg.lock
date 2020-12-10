@@ -7,7 +7,7 @@
   name = "github.com/bitrise-io/go-steputils"
   packages = ["stepconf"]
   pruneopts = "UT"
-  revision = "6d5afa53c7b85b6135e382105116d245b5997ace"
+  revision = "03ae3a6ded35c5e8aed0058ec270e3494d242d17"
 
 [[projects]]
   branch = "master"
@@ -28,7 +28,7 @@
     "ziputil",
   ]
   pruneopts = "UT"
-  revision = "0c47c16813a4209321c9d0dba2e75867d6901ff2"
+  revision = "6cc2aa4d248adef509996ac484bffd38856ddf80"
 
 [[projects]]
   branch = "master"
@@ -50,7 +50,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:5a0a434e00ef880e792870fdff66cc1125472494b7d6e14666738125c339a043"
+  digest = "1:7eec4a847cfa305fbcf33fba28a2c76951f38727cfc972adf23941d421167e49"
   name = "github.com/bitrise-io/xcode-project"
   packages = [
     ".",
@@ -62,7 +62,7 @@
     "xcworkspace",
   ]
   pruneopts = "UT"
-  revision = "9481b30b489b9eaf073c818fcf4817b5b3224285"
+  revision = "7ad13a1dd0215b60eb4e930244d3e42049c37848"
 
 [[projects]]
   branch = "master"
@@ -70,7 +70,7 @@
   name = "github.com/bitrise-steplib/steps-xcode-archive"
   packages = ["utils"]
   pruneopts = "UT"
-  revision = "ba19fe16cdb0d8ee3a7ea8be5e8c5b65037acf2a"
+  revision = "1ecab8b5c0673cd32e31ea29843a579fbb7d2131"
 
 [[projects]]
   branch = "master"
@@ -97,7 +97,7 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:a2c690dfee42801a26a0e88f69206feca8a3c2437fd476d84767468d7d7708e9"
+  digest = "1:666e3df74f0c4788cc92426b18e33d93b7b62a3d4e8253f7c4b2226132a0f8de"
   name = "golang.org/x/text"
   packages = [
     "internal/gen",
@@ -108,16 +108,16 @@
     "unicode/norm",
   ]
   pruneopts = "UT"
-  revision = "23ae387dee1f90d29a23c0e87ee0b46038fbed0e"
-  version = "v0.3.3"
+  revision = "22f1617af38ed4cd65b3b96e02bab267e560155c"
+  version = "v0.3.4"
 
 [[projects]]
   branch = "master"
-  digest = "1:b5ead2120cd278858a83be14ef551f54295da350033dbc3f227fe0298b880256"
+  digest = "1:812d0f78132bbf7731c247b2a3ea54710ecc8fd251a9e4898be9793f25dbdb1a"
   name = "howett.net/plist"
   packages = ["."]
   pruneopts = "UT"
-  revision = "3b63eb3a43b59c776909681ed1fcb412b47d3c9a"
+  revision = "1454fab16a0642638feb0ae98c41f79eccb2a20a"
 
 [solve-meta]
   analyzer-name = "dep"

@@ -53,7 +53,6 @@ func TestConfig_validate(t *testing.T) {
 				CompileBitcode:                  tt.fields.CompileBitcode,
 				TeamID:                          tt.fields.TeamID,
 				CustomExportOptionsPlistContent: tt.fields.CustomExportOptionsPlistContent,
-				UseLegacyExport:                 tt.fields.UseLegacyExport,
 				DeployDir:                       tt.fields.DeployDir,
 				VerboseLog:                      tt.fields.VerboseLog,
 			}
@@ -64,7 +63,6 @@ func TestConfig_validate(t *testing.T) {
 				CompileBitcode:                  tt.want.CompileBitcode,
 				TeamID:                          tt.want.TeamID,
 				CustomExportOptionsPlistContent: tt.want.CustomExportOptionsPlistContent,
-				UseLegacyExport:                 tt.want.UseLegacyExport,
 				DeployDir:                       tt.want.DeployDir,
 				VerboseLog:                      tt.want.VerboseLog,
 			}
