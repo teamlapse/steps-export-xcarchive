@@ -1,225 +1,46 @@
-format_version: 6
+format_version: "11"
 default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
 
-app:
-  envs:
-  - RELEASE_VERSION: 1.0.1
-  - ORIG_BITRISE_SOURCE_DIR: $BITRISE_SOURCE_DIR
-  - SAMPLE_ARTIFACTS_URL: https://github.com/bitrise-io/sample-artifacts.git
-  - SAMPLE_ARTIFACTS_BRANCH: master
-  - CUSTOM_PLIST: |-
-      <?xml version="1.0" encoding="UTF-8"?>
-      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-      <plist version="1.0">
-          <dict>
-            <key>compileBitcode</key>
-            <false/>
-            <key>destination</key>
-            <string>export</string>
-            <key>method</key>
-            <string>development</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>com.bitrise.code-sign-test</key>
-              <string>BitriseBot-Wildcard</string>
-              <key>com.bitrise.code-sign-test.share-extension</key>
-              <string>BitriseBot-Wildcard</string>
-              <key>com.bitrise.code-sign-test.watchkitapp</key>
-              <string>BitriseBot-Wildcard</string>
-              <key>com.bitrise.code-sign-test.watchkitapp.watchkitextension</key>
-              <string>BitriseBot-Wildcard</string>
-            </dict>
-            <key>signingCertificate</key>
-            <string>iPhone Developer: Dev Portal Bot Bitrise (E89JV3W9K4)</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>stripSwiftSymbols</key>
-            <true/>
-            <key>teamID</key>
-            <string>72SA8V3WYL</string>
-            <key>thinning</key>
-            <string>&lt;none&gt;</string>
-          </dict>
-      </plist>
-
 workflows:
-  #usual go checks
-  _common_go_checks:
-    steps:
-    - go-list:
-    - golint:
-    - errcheck:
-    - go-test:
-
-
-  # Make sure to start with a clean setup
-  # Remove _tmp, switch workdir and install certs
-  _common_prepare:
+  sample:
     steps:
     - script:
+        title: Clean _tmp dir
         inputs:
         - content: |-
-            #!/bin/bash
-            set -ex
-            rm -rf "$ORIG_BITRISE_SOURCE_DIR/_tmp"
-            mkdir -p "$ORIG_BITRISE_SOURCE_DIR/_tmp"
+            #!/usr/bin/env bash
+            set -e
+            rm -rf ./_tmp
     - change-workdir:
-        title: Switch working dir to _tmp dir
-        run_if: true
+        title: Switch working dir to _tmp
         inputs:
-        - path: "$ORIG_BITRISE_SOURCE_DIR/_tmp"
+        - path: ./_tmp
         - is_create_path: true
-    - certificate-and-profile-installer:
-
-  # Clone sample artifacts
-  _common_clone:
-    steps:
-    - script:
+    - git::https://github.com/bitrise-steplib/bitrise-step-simple-git-clone.git@master:
+        title: Clone sample app
         inputs:
-        - content: |-
-            #!/usr/bin/env bash
-
-            if [[ -z "${SAMPLE_ARTIFACTS_URL}" ]]; then
-            echo "error: there is no SAMPLE_ARTIFACTS_URL env var specified"
-            exit 1
-            elif [[ -z "${SAMPLE_ARTIFACTS_COMMIT}" && -z "${SAMPLE_ARTIFACTS_BRANCH}" ]]; then
-            echo "error: can't checkout: there is no SAMPLE_ARTIFACTS_BRANCH or SAMPLE_ARTIFACTS_COMMIT env var specified"
-            exit 1
-            fi
-
-            git init
-            git remote add origin "${SAMPLE_ARTIFACTS_URL}" 
-            git fetch || exit 1
-
-            [[ -n "${SAMPLE_ARTIFACTS_COMMIT}" ]] && git checkout "${SAMPLE_ARTIFACTS_COMMIT}" || git checkout "${SAMPLE_ARTIFACTS_BRANCH}"
-
-  # ----------------------------------------------------------------
-  # --- Workflows for testing
-
-  # test on pre Xcode 12 
-  test_legacy:
-    steps:
+        - repository_url: https://github.com/bitrise-io/sample-artifacts.git
+        - clone_into_dir: .
+        - branch: master
     - path::./:
         title: Step Test - iOS archive
         inputs:
         - export_method: development
-        - archive_path: "./archives/ios.xcarchive"
-    - path::./:
-        title: Step Test - Custom plist
-        inputs:
-        - export_method: development
-        - archive_path: "./archives/ios.xcarchive"
-        - custom_export_options_plist_content: $CUSTOM_PLIST
-    before_run:
-    - _common_go_checks
-    - _common_prepare
-    - _common_clone
-    after_run:
-    - test_xamarin
+        - archive_path: ./archives/ios.xcarchive
 
-  # test on Xcode 12
-  test:
+  check:
     steps:
-    - path::./:
-        title: Step Test - iOS archive
-        inputs:
-        - export_method: development
-        - archive_path: "./archives/ios.xcarchive"
-    - path::./:
-        title: Step Test - Custom plist
-        inputs:
-        - export_method: development
-        - archive_path: "./archives/ios.xcarchive"
-        - custom_export_options_plist_content: $CUSTOM_PLIST
-    - path::./:
-        title: Step Test - TV OS
-        inputs:
-        - export_method: development
-        - archive_path: "./archives/TVOS.xcarchive"
-    - path::./:
-        title: Step Test - App Clip
-        inputs:
-        - export_method: development
-        - archive_path: "./archives/Fruta.xcarchive"
-        - product: "app-clip"
-    before_run:
-    - _common_go_checks
-    - _common_prepare
-    - _common_clone
+    - git::https://github.com/bitrise-steplib/steps-check.git: { }
 
-  test_xamarin:
-    envs:
-    - PRODUCT: "app"
-    - SAMPLE_APP_URL: https://github.com/bitrise-samples/sample-apps-xamarin-cross-platform.git
-    - BRANCH: master
-    - BITRISE_PROJECT_PATH: Multiplatform.sln
-    - BITRISE_XAMARIN_CONFIGURATION: Release
-    - BITRISE_XAMARIN_PLATFORM: iPhone
-    - LEGACY: "no"
-    before_run: 
-    - _common_prepare
+  e2e:
     steps:
-    - script:
+    - git::https://github.com/bitrise-steplib/steps-check.git:
         inputs:
-        - content: |-
-            #!/usr/bin/env bash
+        - workflow: e2e
 
-            if [[ -z "${SAMPLE_APP_URL}" ]]; then
-            echo "error: there is no SAMPLE_APP_URL env var specified"
-            exit 1
-            elif [[ -z "${COMMIT}" && -z "${BRANCH}" ]]; then
-            echo "error: can't checkout: there is no BRANCH or COMMIT env var specified"
-            exit 1
-            fi
-
-            git init
-            git remote add origin "${SAMPLE_APP_URL}" 
-            git fetch || exit 1
-
-            [[ -n "${COMMIT}" ]] && git checkout "${COMMIT}" || git checkout "${BRANCH}"
-    - nuget-restore:
-        inputs:
-        - nuget_version: ""
-    - xamarin-archive:
-        inputs:
-        - project_type_whitelist: ios
-    - path::./:
-        title: Step Test - Export Options
-        inputs:
-        - export_method: development
-    - script:
-        title: Output Test
-        inputs:
-        - content: |-
-            echo "BITRISE_IPA_PATH: $BITRISE_IPA_PATH"
-            echo "BITRISE_DSYM_PATH: $BITRISE_DSYM_PATH"
-            rm "$BITRISE_IPA_PATH"
-            rm "$BITRISE_DSYM_PATH"
-
-  # ----------------------------------------------------------------
-  # --- Utility workflows
-  dep-update:
-    title: Dep update
-    description: |
-      Used for updating bitrise dependencies with dep
+  generate_readme:
     steps:
-    - script:
-        title: Dependency update
+    - git::https://github.com/bitrise-steplib/steps-readme-generator.git@main:
         inputs:
-        - content: |-
-            #!/bin/bash
-            set -ex
-            go get -u -v github.com/golang/dep/cmd/dep
-            dep ensure -v
-            dep ensure -v -update
-
-  # ----------------------------------------------------------------
-  # --- workflows to Share this step into a Step Library
-  audit-this-step:
-    steps:
-    - script:
-        inputs:
-        - content: |-
-            #!/bin/bash
-            set -ex
-            stepman audit --step-yml ./step.yml
+        - contrib_section: docs/contribution.md
+        - example_section: docs/examples.md

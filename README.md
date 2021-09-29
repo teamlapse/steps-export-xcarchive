@@ -1,82 +1,76 @@
-# My Awesome Step
+# Export iOS and tvOS Xcode archive
 
-My Awesome Step is a solid starting code base for
-a new Step.
+[![Step changelog](https://shields.io/github/v/release/bitrise-steplib/steps-export-xcarchive?include_prereleases&label=changelog&color=blueviolet)](https://github.com/bitrise-steplib/steps-export-xcarchive/releases)
 
+Export iOS and tvOS IPA from an existing Xcode archive
 
-## How to use this Step
+<details>
+<summary>Description</summary>
 
-Can be run directly with the [bitrise CLI](https://github.com/bitrise-io/bitrise),
-just `git clone` this repository, `cd` into it's folder in your Terminal/Command Line
-and call `bitrise run test`.
+Exports an IPA from an existing iOS and tvOS `.xcarchive` file.
+</details>
 
-*Check the `bitrise.yml` file for required inputs which have to be
-added to your `.bitrise.secrets.yml` file!*
+## 🧩 Get started
 
-Step by step:
+Add this step directly to your workflow in the [Bitrise Workflow Editor](https://devcenter.bitrise.io/steps-and-workflows/steps-and-workflows-index/).
 
-1. Open up your Terminal / Command Line
-2. `git clone` the repository
-3. `cd` into the directory of the step (the one you just `git clone`d)
-5. Create a `.bitrise.secrets.yml` file in the same directory of `bitrise.yml` - the `.bitrise.secrets.yml` is a git ignored file, you can store your secrets in
-6. Check the `bitrise.yml` file for any secret you should set in `.bitrise.secrets.yml`
-  * Best practice is to mark these options with something like `# define these in your .bitrise.secrets.yml`, in the `app:envs` section.
-7. Once you have all the required secret parameters in your `.bitrise.secrets.yml` you can just run this step with the [bitrise CLI](https://github.com/bitrise-io/bitrise): `bitrise run test`
+You can also run this step directly with [Bitrise CLI](https://github.com/bitrise-io/bitrise).
 
-An example `.bitrise.secrets.yml` file:
+### Example
 
-```
-envs:
-- A_SECRET_PARAM_ONE: the value for secret one
-- A_SECRET_PARAM_TWO: the value for secret two
-```
+Archive, then export both development and app-store IPAs:
 
-## How to create your own step
-
-1. Create a new git repository for your step (**don't fork** the *step template*, create a *new* repository)
-2. Copy the [step template](https://github.com/bitrise-steplib/step-template) files into your repository
-3. Fill the `step.sh` with your functionality
-4. Wire out your inputs to `step.yml` (`inputs` section)
-5. Fill out the other parts of the `step.yml` too
-6. Provide test values for the inputs in the `bitrise.yml`
-7. Run your step with `bitrise run test` - if it works, you're ready
-
-__For Step development guidelines & best practices__ check this documentation: [https://github.com/bitrise-io/bitrise/blob/master/_docs/step-development-guideline.md](https://github.com/bitrise-io/bitrise/blob/master/_docs/step-development-guideline.md).
-
-**NOTE:**
-
-If you want to use your step in your project's `bitrise.yml`:
-
-1. git push the step into it's repository
-2. reference it in your `bitrise.yml` with the `git::PUBLIC-GIT-CLONE-URL@BRANCH` step reference style:
-
-```
-- git::https://github.com/user/my-step.git@branch:
-   title: My step
-   inputs:
-   - my_input_1: "my value 1"
-   - my_input_2: "my value 2"
+```yaml
+steps:
+- xcode-archive:
+    title: Archive and export development IPA
+    inputs:
+    - export_method: development
+- export-xcarchive:
+    title: Export app-store IPA
+    inputs:
+    - archive_path: $BITRISE_XCARCHIVE_PATH # this env var is an output of the previous xcode-archive step
+    - export_method: app-store
+- deploy-to-bitrise-io: # deploy both IPAs as build artifacts
+- deploy-to-itunesconnect-application-loader: # deploy the app-store IPA
 ```
 
-You can find more examples of step reference styles
-in the [bitrise CLI repository](https://github.com/bitrise-io/bitrise/blob/master/_examples/tutorials/steps-and-workflows/bitrise.yml#L65).
+## ⚙️ Configuration
 
-## How to contribute to this Step
+<details>
+<summary>Inputs</summary>
 
-1. Fork this repository
-2. `git clone` it
-3. Create a branch you'll work on
-4. To use/test the step just follow the **How to use this Step** section
-5. Do the changes you want to
-6. Run/test the step before sending your contribution
-  * You can also test the step in your `bitrise` project, either on your Mac or on [bitrise.io](https://www.bitrise.io)
-  * You just have to replace the step ID in your project's `bitrise.yml` with either a relative path, or with a git URL format
-  * (relative) path format: instead of `- original-step-id:` use `- path::./relative/path/of/script/on/your/Mac:`
-  * direct git URL format: instead of `- original-step-id:` use `- git::https://github.com/user/step.git@branch:`
-  * You can find more example of alternative step referencing at: https://github.com/bitrise-io/bitrise/blob/master/_examples/tutorials/steps-and-workflows/bitrise.yml
-7. Once you're done just commit your changes & create a Pull Request
+| Key | Description | Flags | Default |
+| --- | --- | --- | --- |
+| `archive_path` | Path to the iOS or tvOS archive (.xcarchive) which should be exported. | required | `$BITRISE_XCARCHIVE_PATH` |
+| `export_method` | `auto-detect` option is **DEPRECATED** - use direct export methods!  Describes how Xcode should export the archive.     If you select `auto-detect`, the step will figure out the proper export method   based on the provisioning profile embedded into the generated xcode archive. | required | `auto-detect` |
+| `upload_bitcode` | For __App Store__ exports, should the package include bitcode? | required | `yes` |
+| `compile_bitcode` | For __non-App Store__ exports, should Xcode re-compile the app from bitcode? | required | `yes` |
+| `team_id` | The Developer Portal team to use for this export.  Format example:  - `1MZX23ABCD4` |  |  |
+| `product` | Describes which product to export.    Possible options are App or App Clip. | required | `app` |
+| `custom_export_options_plist_content` | Specifies a custom export options plist content that configures archive exporting. If empty, step generates these options based on the embedded provisioning profile, with default values.  Auto generated export options available for export methods:  - app-store - ad-hoc - enterprise - development  If step doesn't find export method based on provisioning profile, development will be use.  Call `xcodebuild -help` for available export options. |  |  |
+| `verbose_log` | Enable verbose logging? | required | `yes` |
+</details>
 
+<details>
+<summary>Outputs</summary>
 
-## Share your own Step
+| Environment Variable | Description |
+| --- | --- |
+| `BITRISE_IPA_PATH` |  |
+| `BITRISE_DSYM_PATH` | Step will collect every dsym (app dsym and framwork dsyms) in a directory, zip it and export the zipped directory path. |
+| `BITRISE_IDEDISTRIBUTION_LOGS_PATH` |  |
+</details>
 
-You can share your Step or step version with the [bitrise CLI](https://github.com/bitrise-io/bitrise). Just run `bitrise share` and follow the guide it prints.
+## 🙋 Contributing
+
+We welcome [pull requests](https://github.com/bitrise-steplib/steps-export-xcarchive/pulls) and [issues](https://github.com/bitrise-steplib/steps-export-xcarchive/issues) against this repository.
+
+For pull requests, work on your changes in a forked repository and use the Bitrise CLI to [run step tests locally](https://devcenter.bitrise.io/bitrise-cli/run-your-first-build/).
+
+Note: this step's end-to-end tests (defined in e2e/bitrise.yml) are working with secrets which are intentionally not stored in this repo. External contributors won't be able to run those tests. Don't worry, if you open a PR with your contribution, we will help with running tests and make sure that they pass.
+
+Learn more about developing steps:
+
+- [Create your own step](https://devcenter.bitrise.io/contributors/create-your-own-step/)
+- [Testing your Step](https://devcenter.bitrise.io/contributors/testing-and-versioning-your-steps/)

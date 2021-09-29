@@ -1,9 +1,7 @@
 title: Export iOS and tvOS Xcode archive
-summary: Export iOS and tvOS Xcode archive
+summary: Export iOS and tvOS IPA from an existing Xcode archive
 description: |-
-  Export iOS and tvOS Xcode archive.
-
-  Exports .ipa from iOS and tvOS .xcarchive.
+  Exports an IPA from an existing iOS and tvOS `.xcarchive` file.
 website: https://github.com/bitrise-steplib/steps-export-xcarchive
 source_code_url: https://github.com/bitrise-steplib/steps-export-xcarchive
 support_url: https://github.com/bitrise-steplib/steps-export-xcarchive/issues
@@ -54,8 +52,6 @@ inputs:
       title: "Include bitcode"
       summary: ""
       description: |-
-        __Export option:__  
-
         For __App Store__ exports, should the package include bitcode?
       value_options:
       - "yes"
@@ -66,8 +62,6 @@ inputs:
       title: "Rebuild from bitcode"
       summary: ""
       description: |-
-        __Export option:__  
-        
         For __non-App Store__ exports, should Xcode re-compile the app from bitcode?
       value_options:
       - "yes"
@@ -78,8 +72,6 @@ inputs:
       title: "The Developer Portal team to use for this export"
       summary: ""
       description: |-
-        __Export option:__  
-        
         The Developer Portal team to use for this export.
 
         Format example:
