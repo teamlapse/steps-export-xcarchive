@@ -34,7 +34,7 @@ func TestConfig_validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "CustomExportOptionsPlistContent contains whitespace",
+			name: "ExportOptionsPlistContent contains whitespace",
 			fields: fields{
 				CustomExportOptionsPlistContent: "  ",
 			},
@@ -47,24 +47,24 @@ func TestConfig_validate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			configs := &Config{
-				ArchivePath:                     tt.fields.ArchivePath,
-				ExportMethod:                    tt.fields.ExportMethod,
-				UploadBitcode:                   tt.fields.UploadBitcode,
-				CompileBitcode:                  tt.fields.CompileBitcode,
-				TeamID:                          tt.fields.TeamID,
-				CustomExportOptionsPlistContent: tt.fields.CustomExportOptionsPlistContent,
-				DeployDir:                       tt.fields.DeployDir,
-				VerboseLog:                      tt.fields.VerboseLog,
+				ArchivePath:               tt.fields.ArchivePath,
+				DistributionMethod:        tt.fields.ExportMethod,
+				UploadBitcode:             tt.fields.UploadBitcode,
+				CompileBitcode:            tt.fields.CompileBitcode,
+				TeamID:                    tt.fields.TeamID,
+				ExportOptionsPlistContent: tt.fields.CustomExportOptionsPlistContent,
+				DeployDir:                 tt.fields.DeployDir,
+				VerboseLog:                tt.fields.VerboseLog,
 			}
 			wantConfigs := &Config{
-				ArchivePath:                     tt.want.ArchivePath,
-				ExportMethod:                    tt.want.ExportMethod,
-				UploadBitcode:                   tt.want.UploadBitcode,
-				CompileBitcode:                  tt.want.CompileBitcode,
-				TeamID:                          tt.want.TeamID,
-				CustomExportOptionsPlistContent: tt.want.CustomExportOptionsPlistContent,
-				DeployDir:                       tt.want.DeployDir,
-				VerboseLog:                      tt.want.VerboseLog,
+				ArchivePath:               tt.want.ArchivePath,
+				DistributionMethod:        tt.want.ExportMethod,
+				UploadBitcode:             tt.want.UploadBitcode,
+				CompileBitcode:            tt.want.CompileBitcode,
+				TeamID:                    tt.want.TeamID,
+				ExportOptionsPlistContent: tt.want.CustomExportOptionsPlistContent,
+				DeployDir:                 tt.want.DeployDir,
+				VerboseLog:                tt.want.VerboseLog,
 			}
 			if err := configs.validate(); (err != nil) != tt.wantErr {
 				t.Errorf("Config.validate() error = %v, wantErr %v", err, tt.wantErr)

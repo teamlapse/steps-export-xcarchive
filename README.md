@@ -43,12 +43,12 @@ steps:
 | Key | Description | Flags | Default |
 | --- | --- | --- | --- |
 | `archive_path` | Path to the iOS or tvOS archive (.xcarchive) which should be exported. | required | `$BITRISE_XCARCHIVE_PATH` |
-| `export_method` | `auto-detect` option is **DEPRECATED** - use direct export methods!  Describes how Xcode should export the archive.     If you select `auto-detect`, the step will figure out the proper export method   based on the provisioning profile embedded into the generated xcode archive. | required | `auto-detect` |
-| `upload_bitcode` | For __App Store__ exports, should the package include bitcode? | required | `yes` |
+| `product` | Describes which product to export. Possible options are App or App Clip. | required | `app` |
+| `distribution_method` | Describes how Xcode should export the archive. | required |  |
+| `export_development_team` | The Developer Portal team to use for this export.  Format example: `1MZX23ABCD4` |  |  |
 | `compile_bitcode` | For __non-App Store__ exports, should Xcode re-compile the app from bitcode? | required | `yes` |
-| `team_id` | The Developer Portal team to use for this export.  Format example:  - `1MZX23ABCD4` |  |  |
-| `product` | Describes which product to export.    Possible options are App or App Clip. | required | `app` |
-| `custom_export_options_plist_content` | Specifies a custom export options plist content that configures archive exporting. If empty, step generates these options based on the embedded provisioning profile, with default values.  Auto generated export options available for export methods:  - app-store - ad-hoc - enterprise - development  If step doesn't find export method based on provisioning profile, development will be use.  Call `xcodebuild -help` for available export options. |  |  |
+| `upload_bitcode` | For __App Store__ exports, should the package include bitcode? | required | `yes` |
+| `custom_export_options_plist_content` | Specifies a custom export options plist content that configures archive exporting. If empty, step generates these options based on the embedded provisioning profile, with default values.  Call `xcodebuild -help` for available export options. |  |  |
 | `verbose_log` | Enable verbose logging? | required | `yes` |
 </details>
 

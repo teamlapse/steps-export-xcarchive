@@ -48,43 +48,37 @@ func ParseExportProduct(product string) (ExportProduct, error) {
 	case "app-clip":
 		return ExportProductAppClip, nil
 	default:
-		return ExportProduct(""), fmt.Errorf("unkown method (%s)", product)
+		return "", fmt.Errorf("unkown method (%s)", product)
 	}
 }
 
 // Config ...
 type Config struct {
-	ArchivePath                     string `env:"archive_path,dir"`
-	ExportMethod                    string `env:"export_method,opt[auto-detect,app-store,ad-hoc,enterprise,development]"`
-	UploadBitcode                   bool   `env:"upload_bitcode,opt[yes,no]"`
-	CompileBitcode                  bool   `env:"compile_bitcode,opt[yes,no]"`
-	TeamID                          string `env:"team_id"`
-	ProductToDistribute             string `env:"product,opt[app,app-clip]"`
-	CustomExportOptionsPlistContent string `env:"custom_export_options_plist_content"`
+	ArchivePath               string `env:"archive_path,dir"`
+	DistributionMethod        string `env:"distribution_method,opt[development,app-store,ad-hoc,enterprise]"`
+	UploadBitcode             bool   `env:"upload_bitcode,opt[yes,no]"`
+	CompileBitcode            bool   `env:"compile_bitcode,opt[yes,no]"`
+	TeamID                    string `env:"export_development_team"`
+	ProductToDistribute       string `env:"product,opt[app,app-clip]"`
+	ExportOptionsPlistContent string `env:"export_options_plist_content"`
 
 	DeployDir  string `env:"BITRISE_DEPLOY_DIR"`
 	VerboseLog bool   `env:"verbose_log,opt[yes,no]"`
 }
 
 func (configs *Config) validate() error {
-	if configs.ExportMethod == "auto-detect" {
-		exportMethods := []exportoptions.Method{exportoptions.MethodAppStore, exportoptions.MethodAdHoc, exportoptions.MethodEnterprise, exportoptions.MethodDevelopment}
-		log.Warnf("  Export method: auto-detect is DEPRECATED, use a direct export method %s", exportMethods)
+	// Validate ExportOptionsPlistContent
+	trimmedExportOptions := strings.TrimSpace(configs.ExportOptionsPlistContent)
+	if configs.ExportOptionsPlistContent != trimmedExportOptions {
+		configs.ExportOptionsPlistContent = trimmedExportOptions
+		log.Warnf("ExportOptionsPlistContent contains leading and trailing white space, removed:")
+		log.Printf(configs.ExportOptionsPlistContent)
 		fmt.Println()
 	}
-
-	// Validate CustomExportOptionsPlistContent
-	trimmedExportOptions := strings.TrimSpace(configs.CustomExportOptionsPlistContent)
-	if configs.CustomExportOptionsPlistContent != trimmedExportOptions {
-		configs.CustomExportOptionsPlistContent = trimmedExportOptions
-		log.Warnf("CustomExportOptionsPlistContent contains leading and trailing white space, removed:")
-		log.Printf(configs.CustomExportOptionsPlistContent)
-		fmt.Println()
-	}
-	if configs.CustomExportOptionsPlistContent != "" {
+	if configs.ExportOptionsPlistContent != "" {
 		var options map[string]interface{}
-		if _, err := plist.Unmarshal([]byte(configs.CustomExportOptionsPlistContent), &options); err != nil {
-			return fmt.Errorf("issue with input CustomExportOptionsPlistContent: %s", err.Error())
+		if _, err := plist.Unmarshal([]byte(configs.ExportOptionsPlistContent), &options); err != nil {
+			return fmt.Errorf("issue with input ExportOptionsPlistContent: %s", err.Error())
 		}
 	}
 
@@ -139,19 +133,12 @@ func generateExportOptionsPlist(exportProduct ExportProduct, exportMethodStr, te
 		break
 	}
 
-	if exportMethodStr == "auto-detect" {
-		log.Printf("auto-detect export method specified")
-		exportMethod = archive.Application.ProvisioningProfile.ExportType
-
-		log.Printf("using the archive profile's export method: %s", exportMethod)
-	} else {
-		parsedMethod, err := exportoptions.ParseMethod(exportMethodStr)
-		if err != nil {
-			fail("Failed to parse export options, error: %s", err)
-		}
-		exportMethod = parsedMethod
-		log.Printf("export-method specified: %s", exportMethodStr)
+	parsedMethod, err := exportoptions.ParseMethod(exportMethodStr)
+	if err != nil {
+		fail("Failed to parse export options, error: %s", err)
 	}
+	exportMethod = parsedMethod
+	log.Printf("export-method specified: %s", exportMethodStr)
 
 	if xcodebuildMajorVersion >= 9 {
 		log.Printf("xcode major version > 9, generating provisioningProfiles node")
@@ -398,7 +385,7 @@ func main() {
 
 	xcodebuildVersion, err := utility.GetXcodeVersion()
 	if err != nil {
-		fail("Failed to determin xcode version, error: %s", err)
+		fail("Failed to determine Xcode version, error: %s", err)
 	}
 	log.Printf("- xcodebuildVersion: %s (%s)", xcodebuildVersion.Version, xcodebuildVersion.BuildVersion)
 
@@ -437,24 +424,24 @@ func main() {
 	}
 
 	fmt.Println()
-	log.Infof("Archive infos:")
+	log.Infof("Archive info:")
 	log.Printf("team: %s (%s)", mainApplication.ProvisioningProfile.TeamName, mainApplication.ProvisioningProfile.TeamID)
 	log.Printf("profile: %s (%s)", mainApplication.ProvisioningProfile.Name, mainApplication.ProvisioningProfile.UUID)
 	log.Printf("export: %s", archiveExportMethod)
-	log.Printf("xcode managed profile: %v", archiveCodeSignIsXcodeManaged)
+	log.Printf("Xcode managed profile: %v", archiveCodeSignIsXcodeManaged)
 	fmt.Println()
 
 	log.Infof("Exporting with export options...")
 
-	if configs.CustomExportOptionsPlistContent != "" {
-		log.Printf("Custom export options content provided, using it:")
-		fmt.Println(configs.CustomExportOptionsPlistContent)
+	if configs.ExportOptionsPlistContent != "" {
+		log.Printf("Export options content provided, using it:")
+		fmt.Println(configs.ExportOptionsPlistContent)
 
-		if err := fileutil.WriteStringToFile(exportOptionsPath, configs.CustomExportOptionsPlistContent); err != nil {
+		if err := fileutil.WriteStringToFile(exportOptionsPath, configs.ExportOptionsPlistContent); err != nil {
 			fail("Failed to write export options to file, error: %s", err)
 		}
 	} else {
-		exportOptionsContent, err := generateExportOptionsPlist(productToDistribute, configs.ExportMethod, configs.TeamID, configs.UploadBitcode, configs.CompileBitcode, xcodebuildVersion.MajorVersion, archive)
+		exportOptionsContent, err := generateExportOptionsPlist(productToDistribute, configs.DistributionMethod, configs.TeamID, configs.UploadBitcode, configs.CompileBitcode, xcodebuildVersion.MajorVersion, archive)
 		if err != nil {
 			fail("Failed to generate export options, error: %s", err)
 		}

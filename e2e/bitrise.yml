@@ -53,23 +53,23 @@ workflows:
     - path::./:
         title: Step Test - iOS archive
         inputs:
-        - export_method: development
+        - distribution_method: development
         - archive_path: ./archives/ios.xcarchive
     - path::./:
         title: Step Test - Custom plist
         inputs:
-        - export_method: development
+        - distribution_method: development
         - archive_path: ./archives/ios.xcarchive
         - custom_export_options_plist_content: $CUSTOM_PLIST
     - path::./:
         title: Step Test - TV OS
         inputs:
-        - export_method: development
+        - distribution_method: development
         - archive_path: ./archives/TVOS.xcarchive
     - path::./:
         title: Step Test - App Clip
         inputs:
-        - export_method: development
+        - distribution_method: development
         - archive_path: ./archives/Fruta.xcarchive
         - product: app-clip
 
