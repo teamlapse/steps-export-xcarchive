@@ -58,7 +58,7 @@ inputs:
   opts:
     category: IPA export configuration
     title: Developer Portal team
-    summary: The Developer Portal team to use for this export
+    summary: The Developer Portal team to use for this export.
     description: |-
       The Developer Portal team to use for this export.
 
