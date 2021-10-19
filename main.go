@@ -127,10 +127,8 @@ func generateExportOptionsPlist(exportProduct ExportProduct, exportMethodStr, te
 	switch exportProduct {
 	case ExportProductApp:
 		productBundleID = archive.Application.BundleIdentifier()
-		break
 	case ExportProductAppClip:
 		productBundleID = archive.Application.ClipApplication.BundleIdentifier()
-		break
 	}
 
 	parsedMethod, err := exportoptions.ParseMethod(exportMethodStr)
