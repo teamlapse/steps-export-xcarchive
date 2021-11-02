@@ -32,24 +32,24 @@ inputs:
       The input value sets xcodebuild's `-archivePath` option.
     is_required: true
 
-- product: "app"
+- product: app
   opts:
     title: Select a product to distribute
     summary: Describes which product to export.
     value_options:
-    - "app"
-    - "app-clip"
+    - app
+    - app-clip
     is_required: true
 
-- distribution_method: "development"
+- distribution_method: development
   opts:
     title: Distribution method
     summary: Describes how Xcode should export the archive.
     value_options:
-    - "development"
-    - "app-store"
-    - "ad-hoc"
-    - "enterprise"
+    - development
+    - app-store
+    - ad-hoc
+    - enterprise
     is_required: true
 
 # IPA export configuration
