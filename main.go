@@ -8,8 +8,10 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/bitrise-io/go-steputils/output"
 	"github.com/bitrise-io/go-steputils/stepconf"
 	"github.com/bitrise-io/go-utils/command"
+	"github.com/bitrise-io/go-utils/env"
 	"github.com/bitrise-io/go-utils/fileutil"
 	"github.com/bitrise-io/go-utils/log"
 	"github.com/bitrise-io/go-utils/pathutil"
@@ -361,8 +363,11 @@ func generateExportOptionsPlist(exportProduct ExportProduct, exportMethodStr, te
 }
 
 func main() {
+	envRepository := env.NewRepository()
+	commandFactory := command.NewFactory(envRepository)
+
 	var configs Config
-	if err := stepconf.Parse(&configs); err != nil {
+	if err := stepconf.NewInputParser(envRepository).Parse(&configs); err != nil {
 		fail("Issue with input: %s", err)
 	}
 
@@ -381,7 +386,7 @@ func main() {
 
 	log.Infof("Step determined configs:")
 
-	xcodebuildVersion, err := utility.GetXcodeVersion()
+	xcodebuildVersion, err := utility.GetXcodeVersion(commandFactory)
 	if err != nil {
 		fail("Failed to determine Xcode version, error: %s", err)
 	}
@@ -458,7 +463,7 @@ func main() {
 		fail("Failed to create tmp dir, error: %s", err)
 	}
 
-	exportCmd := xcodebuild.NewExportCommand()
+	exportCmd := xcodebuild.NewExportCommand(commandFactory)
 	exportCmd.SetArchivePath(configs.ArchivePath)
 	exportCmd.SetExportDir(tmpDir)
 	exportCmd.SetExportOptionsPlist(exportOptionsPath)
@@ -470,7 +475,7 @@ func main() {
 		// xcdistributionlogs
 		if logsDirPth, err := findIDEDistrubutionLogsPath(xcodebuildOut); err != nil {
 			log.Warnf("Failed to find xcdistributionlogs, error: %s", err)
-		} else if err := utils.ExportOutputDirAsZip(logsDirPth, ideDistributionLogsZipPath, bitriseIDEDistributionLogsPthEnvKey); err != nil {
+		} else if err := output.ZipAndExportOutput([]string{logsDirPth}, ideDistributionLogsZipPath, bitriseIDEDistributionLogsPthEnvKey); err != nil {
 			log.Warnf("Failed to export %s, error: %s", bitriseIDEDistributionLogsPthEnvKey, err)
 		} else {
 			log.Warnf(`If you can't find the reason of the error in the log, please check the xcdistributionlogs
@@ -510,21 +515,25 @@ is available in the $BITRISE_IDEDISTRIBUTION_LOGS_PATH environment variable`)
 		}
 	}
 
-	if err := utils.ExportOutputFile(exportedIPAPath, exportedIPAPath, bitriseIPAPthEnvKey); err != nil {
+	if err := output.ExportOutputFile(exportedIPAPath, exportedIPAPath, bitriseIPAPthEnvKey); err != nil {
 		fail("Failed to export %s, error: %s", bitriseIPAPthEnvKey, err)
 	}
 
 	log.Donef("The ipa path is now available in the Environment Variable: %s (value: %s)", bitriseIPAPthEnvKey, exportedIPAPath)
 
-	appDSYM, _, err := archive.FindDSYMs()
+	appDSYMs, _, err := archive.FindDSYMs()
 	if err != nil {
 		fail("Failed to export dsym, error: %s", err)
 	}
 
-	if err := utils.ExportOutputDirAsZip(appDSYM, dsymZipPath, bitriseDSYMPthEnvKey); err != nil {
+	if len(appDSYMs) == 0 {
+		log.Warnf("No dSYM was found in the archive")
+		return
+	}
+
+	if err := output.ZipAndExportOutput(appDSYMs, dsymZipPath, bitriseDSYMPthEnvKey); err != nil {
 		fail("Failed to export %s, error: %s", bitriseDSYMPthEnvKey, err)
 	}
 
 	log.Donef("The dSYM zip path is now available in the Environment Variable: %s (value: %s)", bitriseDSYMPthEnvKey, dsymZipPath)
-
 }

@@ -3,12 +3,11 @@ package xcarchive
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/bitrise-io/go-utils/pathutil"
+	"github.com/bitrise-io/go-xcode/autocodesign"
 	"github.com/bitrise-io/go-xcode/plistutil"
 	"github.com/bitrise-io/go-xcode/profileutil"
-	"github.com/bitrise-io/go-xcode/utility"
 )
 
 type iosBaseApplication struct {
@@ -114,7 +113,7 @@ func NewIosWatchApplication(path string) (IosWatchApplication, error) {
 	}
 
 	extensions := []IosExtension{}
-	pattern := filepath.Join(utility.EscapeGlobPath(path), "PlugIns/*.appex")
+	pattern := filepath.Join(pathutil.EscapeGlobPath(path), "PlugIns/*.appex")
 	pths, err := filepath.Glob(pattern)
 	if err != nil {
 		return IosWatchApplication{}, fmt.Errorf("failed to search for watch application's extensions using pattern: %s, error: %s", pattern, err)
@@ -163,7 +162,7 @@ func NewIosApplication(path string) (IosApplication, error) {
 
 	var watchApp *IosWatchApplication
 	{
-		pattern := filepath.Join(utility.EscapeGlobPath(path), "Watch/*.app")
+		pattern := filepath.Join(pathutil.EscapeGlobPath(path), "Watch/*.app")
 		pths, err := filepath.Glob(pattern)
 		if err != nil {
 			return IosApplication{}, err
@@ -180,7 +179,7 @@ func NewIosApplication(path string) (IosApplication, error) {
 
 	var clipApp *IosClipApplication
 	{
-		pattern := filepath.Join(utility.EscapeGlobPath(path), "AppClips/*.app")
+		pattern := filepath.Join(pathutil.EscapeGlobPath(path), "AppClips/*.app")
 		pths, err := filepath.Glob(pattern)
 		if err != nil {
 			return IosApplication{}, err
@@ -197,7 +196,7 @@ func NewIosApplication(path string) (IosApplication, error) {
 
 	extensions := []IosExtension{}
 	{
-		pattern := filepath.Join(utility.EscapeGlobPath(path), "PlugIns/*.appex")
+		pattern := filepath.Join(pathutil.EscapeGlobPath(path), "PlugIns/*.appex")
 		pths, err := filepath.Glob(pattern)
 		if err != nil {
 			return IosApplication{}, fmt.Errorf("failed to search for watch application's extensions using pattern: %s, error: %s", pattern, err)
@@ -283,7 +282,7 @@ func applicationFromPlist(InfoPlist plistutil.PlistData) (string, bool) {
 }
 
 func applicationFromArchive(path string) (string, error) {
-	pattern := filepath.Join(utility.EscapeGlobPath(path), "Products/Applications/*.app")
+	pattern := filepath.Join(pathutil.EscapeGlobPath(path), "Products/Applications/*.app")
 	pths, err := filepath.Glob(pattern)
 	if err != nil {
 		return "", err
@@ -377,22 +376,41 @@ func (archive IosArchive) BundleIDProfileInfoMap() map[string]profileutil.Provis
 }
 
 // FindDSYMs ...
-func (archive IosArchive) FindDSYMs() (string, []string, error) {
-	dsymsDirPth := filepath.Join(archive.Path, "dSYMs")
-	dsyms, err := utility.ListEntries(dsymsDirPth, utility.ExtensionFilter(".dsym", true))
-	if err != nil {
-		return "", []string{}, err
-	}
+func (archive IosArchive) FindDSYMs() ([]string, []string, error) {
+	return findDSYMs(archive.Path)
+}
 
-	appDSYM := ""
-	frameworkDSYMs := []string{}
-	for _, dsym := range dsyms {
-		if strings.HasSuffix(dsym, ".app.dSYM") {
-			appDSYM = dsym
-		} else {
-			frameworkDSYMs = append(frameworkDSYMs, dsym)
+// ReadCodesignParameters ...
+func (archive IosArchive) ReadCodesignParameters() (*autocodesign.AppLayout, error) {
+	var teamID string
+	entitlementsMap := map[string]autocodesign.Entitlements{}
+
+	bundleIDProfileInfoMap := archive.BundleIDProfileInfoMap()
+	for bundleIdentifier, provisioningProfile := range bundleIDProfileInfoMap {
+		if teamID == "" {
+			teamID = provisioningProfile.TeamID
 		}
+
+		entitlementsMap[bundleIdentifier] = autocodesign.Entitlements(provisioningProfile.Entitlements)
 	}
 
-	return appDSYM, frameworkDSYMs, nil
+	var platform autocodesign.Platform
+
+	platformName := archive.Application.InfoPlist["DTPlatformName"]
+	switch platformName {
+	case "iphoneos":
+		platform = autocodesign.IOS
+	case "appletvos":
+		platform = autocodesign.TVOS
+	default:
+		return nil, fmt.Errorf("unsupported platform found: %s", platformName)
+	}
+
+	codesignParameters := autocodesign.AppLayout{
+		TeamID:                                 teamID,
+		Platform:                               platform,
+		EntitlementsByArchivableTargetBundleID: entitlementsMap,
+		UITestTargetBundleIDs:                  nil,
+	}
+	return &codesignParameters, nil
 }
