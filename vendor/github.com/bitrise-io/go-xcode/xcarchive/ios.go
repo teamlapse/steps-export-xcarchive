@@ -1,6 +1,7 @@
 package xcarchive
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -55,18 +56,10 @@ func newIosBaseApplication(path string) (iosBaseApplication, error) {
 		provisioningProfile = profile
 	}
 
-	entitlements := plistutil.PlistData{}
-	{
-		entitlementsPath := filepath.Join(path, "archived-expanded-entitlements.xcent")
-		if exist, err := pathutil.IsPathExists(entitlementsPath); err != nil {
-			return iosBaseApplication{}, fmt.Errorf("failed to check if entitlements exists at: %s, error: %s", entitlementsPath, err)
-		} else if exist {
-			plist, err := plistutil.NewPlistDataFromFile(entitlementsPath)
-			if err != nil {
-				return iosBaseApplication{}, err
-			}
-			entitlements = plist
-		}
+	executable := executableNameFromInfoPlist(infoPlist)
+	entitlements, err := getEntitlements(path, executable)
+	if err != nil {
+		return iosBaseApplication{}, err
 	}
 
 	return iosBaseApplication{
@@ -380,37 +373,51 @@ func (archive IosArchive) FindDSYMs() ([]string, []string, error) {
 	return findDSYMs(archive.Path)
 }
 
-// ReadCodesignParameters ...
-func (archive IosArchive) ReadCodesignParameters() (*autocodesign.AppLayout, error) {
-	var teamID string
-	entitlementsMap := map[string]autocodesign.Entitlements{}
-
-	bundleIDProfileInfoMap := archive.BundleIDProfileInfoMap()
-	for bundleIdentifier, provisioningProfile := range bundleIDProfileInfoMap {
-		if teamID == "" {
-			teamID = provisioningProfile.TeamID
-		}
-
-		entitlementsMap[bundleIdentifier] = autocodesign.Entitlements(provisioningProfile.Entitlements)
-	}
-
-	var platform autocodesign.Platform
-
+// Platform ...
+func (archive IosArchive) Platform() (autocodesign.Platform, error) {
 	platformName := archive.Application.InfoPlist["DTPlatformName"]
 	switch platformName {
 	case "iphoneos":
-		platform = autocodesign.IOS
+		return autocodesign.IOS, nil
 	case "appletvos":
-		platform = autocodesign.TVOS
+		return autocodesign.TVOS, nil
 	default:
-		return nil, fmt.Errorf("unsupported platform found: %s", platformName)
+		return "", fmt.Errorf("unsupported platform found: %s", platformName)
+	}
+}
+
+// TeamID ...
+func (archive IosArchive) TeamID() (string, error) {
+	bundleIDProfileInfoMap := archive.BundleIDProfileInfoMap()
+	for _, profileInfo := range bundleIDProfileInfoMap {
+		return profileInfo.TeamID, nil
+	}
+	return "", errors.New("team id not found")
+}
+
+// ReadCodesignParameters ...
+func (archive IosArchive) ReadCodesignParameters() (*autocodesign.AppLayout, error) {
+	platform, err := archive.Platform()
+	if err != nil {
+		return nil, err
 	}
 
-	codesignParameters := autocodesign.AppLayout{
-		TeamID:                                 teamID,
+	teamID, err := archive.TeamID()
+	if err != nil {
+		return nil, err
+	}
+
+	bundleIDEntitlementsMap := archive.BundleIDEntitlementsMap()
+
+	entitlementsMap := map[string]autocodesign.Entitlements{}
+	for bundleID, entitlements := range bundleIDEntitlementsMap {
+		entitlementsMap[bundleID] = autocodesign.Entitlements(entitlements)
+	}
+
+	return &autocodesign.AppLayout{
 		Platform:                               platform,
+		TeamID:                                 teamID,
 		EntitlementsByArchivableTargetBundleID: entitlementsMap,
 		UITestTargetBundleIDs:                  nil,
-	}
-	return &codesignParameters, nil
+	}, nil
 }

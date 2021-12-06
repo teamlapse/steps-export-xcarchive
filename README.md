@@ -42,14 +42,21 @@ steps:
 
 | Key | Description | Flags | Default |
 | --- | --- | --- | --- |
-| `archive_path` | Path to the iOS or tvOS archive (.xcarchive) which should be exported. | required | `$BITRISE_XCARCHIVE_PATH` |
-| `product` | Describes which product to export. Possible options are App or App Clip. | required | `app` |
-| `distribution_method` | Describes how Xcode should export the archive. | required |  |
-| `export_development_team` | The Developer Portal team to use for this export.  Format example: `1MZX23ABCD4` |  |  |
+| `archive_path` | Specifies the archive that should be exported.  The input value sets xcodebuild's `-archivePath` option. | required | `$BITRISE_XCARCHIVE_PATH` |
+| `product` | Describes which product to export. | required | `app` |
+| `distribution_method` | Describes how Xcode should export the archive. | required | `development` |
+| `automatic_code_signing` | This input determines which Bitrise Apple service connection should be used for automatic code signing.  Available values: - `off`: Do not do any auto code signing. - `api-key`: [Bitrise Apple Service connection with API Key](https://devcenter.bitrise.io/getting-started/connecting-to-services/setting-up-connection-to-an-apple-service-with-api-key/). - `apple-id`: [Bitrise Apple Service connection with Apple ID](https://devcenter.bitrise.io/getting-started/connecting-to-services/connecting-to-an-apple-service-with-apple-id/). | required | `off` |
+| `register_test_devices` | If this input is set, the Step will register the known test devices on Bitrise from team members with the Apple Developer Portal.  Note that setting this to yes may cause devices to be registered against your limited quantity of test devices in the Apple Developer Portal, which can only be removed once annually during your renewal window. | required | `no` |
+| `min_profile_validity` | If this input is set to >0, the managed Provisioning Profile will be renewed if it expires within the configured number of days.  Otherwise the Step renews the managed Provisioning Profile if it is expired. | required | `0` |
+| `certificate_url_list` | URL of the code signing certificate to download.  Multiple URLs can be specified, separated by a pipe (`\|`) character.  Local file path can be specified, using the `file://` URL scheme. | required, sensitive | `$BITRISE_CERTIFICATE_URL` |
+| `passphrase_list` | Passphrases for the provided code signing certificates.  Specify as many passphrases as many Code signing certificate URL provided, separated by a pipe (`\|`) character. | required, sensitive | `$BITRISE_CERTIFICATE_PASSPHRASE` |
+| `keychain_path` | Path to the Keychain where the code signing certificates will be installed. | required | `$HOME/Library/Keychains/login.keychain` |
+| `keychain_password` | Password for the provided Keychain. | required, sensitive | `$BITRISE_KEYCHAIN_PASSWORD` |
+| `export_development_team` | The Developer Portal team to use for this export.  Defaults to the team used to build the archive. |  |  |
 | `compile_bitcode` | For __non-App Store__ exports, should Xcode re-compile the app from bitcode? | required | `yes` |
 | `upload_bitcode` | For __App Store__ exports, should the package include bitcode? | required | `yes` |
-| `custom_export_options_plist_content` | Specifies a custom export options plist content that configures archive exporting. If empty, step generates these options based on the embedded provisioning profile, with default values.  Call `xcodebuild -help` for available export options. |  |  |
-| `verbose_log` | Enable verbose logging? | required | `yes` |
+| `export_options_plist_content` | Specifies a plist file content that configures archive exporting.  If not specified, the Step will auto-generate it. |  |  |
+| `verbose_log` | If this input is set, the Step will print additional logs for debugging. | required | `no` |
 </details>
 
 <details>
@@ -57,9 +64,9 @@ steps:
 
 | Environment Variable | Description |
 | --- | --- |
-| `BITRISE_IPA_PATH` |  |
+| `BITRISE_IPA_PATH` | The created iOS or tvOS .ipa file's path. |
 | `BITRISE_DSYM_PATH` | Step will collect every dsym (app dsym and framwork dsyms) in a directory, zip it and export the zipped directory path. |
-| `BITRISE_IDEDISTRIBUTION_LOGS_PATH` |  |
+| `BITRISE_IDEDISTRIBUTION_LOGS_PATH` | Path to the xcdistributionlogs zip |
 </details>
 
 ## 🙋 Contributing

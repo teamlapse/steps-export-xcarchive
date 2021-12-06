@@ -13,6 +13,13 @@ import (
 	"github.com/bitrise-io/go-utils/fileutil"
 	"github.com/bitrise-io/go-utils/log"
 	"github.com/bitrise-io/go-utils/pathutil"
+	"github.com/bitrise-io/go-utils/retry"
+	"github.com/bitrise-io/go-xcode/autocodesign/certdownloader"
+	"github.com/bitrise-io/go-xcode/autocodesign/codesignasset"
+	"github.com/bitrise-io/go-xcode/autocodesign/devportalclient"
+	"github.com/bitrise-io/go-xcode/autocodesign/localcodesignasset"
+	"github.com/bitrise-io/go-xcode/codesign"
+	"github.com/bitrise-io/go-xcode/devportalservice"
 	"github.com/bitrise-io/go-xcode/models"
 	"github.com/bitrise-io/go-xcode/profileutil"
 	"github.com/bitrise-io/go-xcode/utility"
@@ -22,47 +29,53 @@ import (
 )
 
 const (
+	// Outputs
 	bitriseIPAPthEnvKey                 = "BITRISE_IPA_PATH"
 	bitriseDSYMPthEnvKey                = "BITRISE_DSYM_PATH"
 	bitriseIDEDistributionLogsPthEnvKey = "BITRISE_IDEDISTRIBUTION_LOGS_PATH"
+	// Code Signing Authentication Source
+	codeSignSourceOff     = "off"
+	codeSignSourceAPIKey  = "api-key"
+	codeSignSourceAppleID = "apple-id"
 )
 
 // Inputs ...
 type Inputs struct {
-	ArchivePath               string `env:"archive_path,dir"`
-	DistributionMethod        string `env:"distribution_method,opt[development,app-store,ad-hoc,enterprise]"`
-	UploadBitcode             bool   `env:"upload_bitcode,opt[yes,no]"`
-	CompileBitcode            bool   `env:"compile_bitcode,opt[yes,no]"`
+	ArchivePath         string `env:"archive_path,dir"`
+	ProductToDistribute string `env:"product,opt[app,app-clip]"`
+	DistributionMethod  string `env:"distribution_method,opt[development,app-store,ad-hoc,enterprise]"`
+	// Automatic code signing
+	CodeSigningAuthSource     string          `env:"automatic_code_signing,opt[off,api-key,apple-id]"`
+	CertificateURLList        string          `env:"certificate_url_list"`
+	CertificatePassphraseList stepconf.Secret `env:"passphrase_list"`
+	KeychainPath              string          `env:"keychain_path"`
+	KeychainPassword          stepconf.Secret `env:"keychain_password"`
+	RegisterTestDevices       bool            `env:"register_test_devices,opt[yes,no]"`
+	MinDaysProfileValid       int             `env:"min_profile_validity,required"`
+	BuildURL                  string          `env:"BITRISE_BUILD_URL"`
+	BuildAPIToken             stepconf.Secret `env:"BITRISE_BUILD_API_TOKEN"`
+	// IPA export configuration
 	TeamID                    string `env:"export_development_team"`
-	ProductToDistribute       string `env:"product,opt[app,app-clip]"`
+	CompileBitcode            bool   `env:"compile_bitcode,opt[yes,no]"`
+	UploadBitcode             bool   `env:"upload_bitcode,opt[yes,no]"`
 	ExportOptionsPlistContent string `env:"export_options_plist_content"`
-
-	DeployDir  string `env:"BITRISE_DEPLOY_DIR"`
-	VerboseLog bool   `env:"verbose_log,opt[yes,no]"`
+	// Debugging
+	VerboseLog bool `env:"verbose_log,opt[yes,no]"`
+	// Output export
+	DeployDir string `env:"BITRISE_DEPLOY_DIR"`
 }
 
 type Config struct {
 	ArchivePath               string
 	DeployDir                 string
 	ProductToDistribute       ExportProduct
-	XcodebuildVersion         models.XcodebuildVersionModel
 	ExportOptionsPlistContent string
 	DistributionMethod        string
 	TeamID                    string
 	UploadBitcode             bool
 	CompileBitcode            bool
-}
-
-type RunOpts struct {
-	ArchivePath               string
-	DeployDir                 string
-	ProductToDistribute       ExportProduct
 	XcodebuildVersion         models.XcodebuildVersionModel
-	ExportOptionsPlistContent string
-	DistributionMethod        string
-	TeamID                    string
-	UploadBitcode             bool
-	CompileBitcode            bool
+	CodesignManager           *codesign.Manager // nil if automatic code signing is "off"
 }
 
 type RunOut struct {
@@ -83,6 +96,7 @@ type ExportOpts struct {
 type Step struct {
 	commandFactory command.Factory
 	inputParser    stepconf.InputParser
+	logger         log.Logger
 }
 
 func (s Step) ProcessInputs() (Config, error) {
@@ -90,6 +104,9 @@ func (s Step) ProcessInputs() (Config, error) {
 	if err := s.inputParser.Parse(&inputs); err != nil {
 		return Config{}, fmt.Errorf("issue with input: %s", err)
 	}
+
+	log.SetEnableDebugLog(inputs.VerboseLog)
+	s.logger.EnableDebugLog(inputs.VerboseLog)
 
 	productToDistribute, err := ParseExportProduct(inputs.ProductToDistribute)
 	if err != nil {
@@ -119,8 +136,6 @@ func (s Step) ProcessInputs() (Config, error) {
 		log.Warnf("TeamID contains leading and trailing white space, removed: %s", inputs.TeamID)
 	}
 
-	log.SetEnableDebugLog(inputs.VerboseLog)
-
 	log.Infof("Step determined configs:")
 
 	xcodebuildVersion, err := utility.GetXcodeVersion(s.commandFactory)
@@ -129,20 +144,131 @@ func (s Step) ProcessInputs() (Config, error) {
 	}
 	log.Printf("- xcodebuildVersion: %s (%s)", xcodebuildVersion.Version, xcodebuildVersion.BuildVersion)
 
+	var codesignManager *codesign.Manager
+	if inputs.CodeSigningAuthSource != codeSignSourceOff {
+		manager, err := s.createCodesignManager(inputs, int(xcodebuildVersion.MajorVersion))
+		if err != nil {
+			return Config{}, err
+		}
+		codesignManager = &manager
+	}
+
 	return Config{
 		ArchivePath:               inputs.ArchivePath,
 		DeployDir:                 inputs.DeployDir,
 		ProductToDistribute:       productToDistribute,
-		XcodebuildVersion:         xcodebuildVersion,
 		ExportOptionsPlistContent: inputs.ExportOptionsPlistContent,
 		DistributionMethod:        inputs.DistributionMethod,
 		TeamID:                    inputs.TeamID,
 		UploadBitcode:             inputs.UploadBitcode,
 		CompileBitcode:            inputs.CompileBitcode,
+		XcodebuildVersion:         xcodebuildVersion,
+		CodesignManager:           codesignManager,
 	}, nil
 }
 
-func (s Step) Run(opts RunOpts) (RunOut, error) {
+func (s Step) createCodesignManager(inputs Inputs, xcodeMajorVersion int) (codesign.Manager, error) {
+	var authType codesign.AuthType
+	switch inputs.CodeSigningAuthSource {
+	case codeSignSourceAppleID:
+		authType = codesign.AppleIDAuth
+	case codeSignSourceAPIKey:
+		authType = codesign.APIKeyAuth
+	case codeSignSourceOff:
+		return codesign.Manager{}, fmt.Errorf("automatic code signing is disabled")
+	}
+
+	codesignInputs := codesign.Input{
+		AuthType:                  authType,
+		DistributionMethod:        inputs.DistributionMethod,
+		CertificateURLList:        inputs.CertificateURLList,
+		CertificatePassphraseList: inputs.CertificatePassphraseList,
+		KeychainPath:              inputs.KeychainPath,
+		KeychainPassword:          inputs.KeychainPassword,
+	}
+
+	codesignConfig, err := codesign.ParseConfig(codesignInputs, s.commandFactory)
+	if err != nil {
+		return codesign.Manager{}, fmt.Errorf("issue with input: %s", err)
+	}
+
+	a, err := xcarchive.NewIosArchive(inputs.ArchivePath)
+	if err != nil {
+		return codesign.Manager{}, err
+	}
+	archive := codesign.NewArchive(a)
+
+	var serviceConnection *devportalservice.AppleDeveloperConnection = nil
+	devPortalClientFactory := devportalclient.NewFactory(s.logger)
+	if authType == codesign.APIKeyAuth || authType == codesign.AppleIDAuth {
+		if serviceConnection, err = devPortalClientFactory.CreateBitriseConnection(inputs.BuildURL, string(inputs.BuildAPIToken)); err != nil {
+			return codesign.Manager{}, err
+		}
+	}
+
+	appleAuthCredentials, err := codesign.SelectConnectionCredentials(authType, serviceConnection, s.logger)
+	if err != nil {
+		return codesign.Manager{}, err
+	}
+
+	opts := codesign.Opts{
+		AuthType:                   authType,
+		ShouldConsiderXcodeSigning: true,
+		TeamID:                     inputs.TeamID,
+		ExportMethod:               codesignConfig.DistributionMethod,
+		XcodeMajorVersion:          xcodeMajorVersion,
+		RegisterTestDevices:        inputs.RegisterTestDevices,
+		SignUITests:                false,
+		MinDaysProfileValidity:     inputs.MinDaysProfileValid,
+		IsVerboseLog:               inputs.VerboseLog,
+	}
+
+	return codesign.NewManagerWithArchive(
+		opts,
+		appleAuthCredentials,
+		serviceConnection,
+		devPortalClientFactory,
+		certdownloader.NewDownloader(codesignConfig.CertificatesAndPassphrases, retry.NewHTTPClient().StandardClient()),
+		codesignasset.NewWriter(codesignConfig.Keychain),
+		localcodesignasset.NewManager(localcodesignasset.NewProvisioningProfileProvider(), localcodesignasset.NewProvisioningProfileConverter()),
+		archive,
+		s.logger,
+	), nil
+}
+
+func (s Step) Run(opts Config) (RunOut, error) {
+	var authOptions *xcodebuild.AuthenticationParams = nil
+	if opts.CodesignManager != nil {
+		log.Infof("Preparing code signing assets (certificates, profiles)")
+
+		xcodebuildAuthParams, err := opts.CodesignManager.PrepareCodesigning()
+		if err != nil {
+			return RunOut{}, fmt.Errorf("failed to manage code signing: %s", err)
+		}
+
+		if xcodebuildAuthParams != nil {
+			privateKey, err := xcodebuildAuthParams.WritePrivateKeyToFile()
+			if err != nil {
+				return RunOut{}, err
+			}
+
+			defer func() {
+				if err := os.Remove(privateKey); err != nil {
+					log.Warnf("failed to remove private key file: %s", err)
+				}
+			}()
+
+			authOptions = &xcodebuild.AuthenticationParams{
+				KeyID:     xcodebuildAuthParams.KeyID,
+				IsssuerID: xcodebuildAuthParams.IssuerID,
+				KeyPath:   privateKey,
+			}
+		}
+	} else {
+		log.Infof("Automatic code signing is disabled, skipped downloading code sign assets")
+	}
+	fmt.Println()
+
 	archiveExt := filepath.Ext(opts.ArchivePath)
 	archiveName := filepath.Base(opts.ArchivePath)
 	archiveName = strings.TrimSuffix(archiveName, archiveExt)
@@ -215,6 +341,9 @@ func (s Step) Run(opts RunOpts) (RunOut, error) {
 	exportCmd.SetArchivePath(opts.ArchivePath)
 	exportCmd.SetExportDir(tmpDir)
 	exportCmd.SetExportOptionsPlist(exportOptionsPath)
+	if authOptions != nil {
+		exportCmd.SetAuthentication(*authOptions)
+	}
 
 	log.Donef("$ %s", exportCmd.PrintableCmd())
 	fmt.Println()
@@ -314,6 +443,7 @@ func RunStep() error {
 	step := Step{
 		commandFactory: command.NewFactory(envRepository),
 		inputParser:    stepconf.NewInputParser(envRepository),
+		logger:         log.NewLogger(),
 	}
 
 	config, err := step.ProcessInputs()
@@ -321,8 +451,7 @@ func RunStep() error {
 		return err
 	}
 
-	runOpts := RunOpts(config)
-	out, runErr := step.Run(runOpts)
+	out, runErr := step.Run(config)
 
 	exportOpts := ExportOpts{
 		IDEDistrubutionLogDir: out.IDEDistrubutionLogDir,
