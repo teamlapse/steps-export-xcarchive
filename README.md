@@ -7,7 +7,35 @@ Export iOS and tvOS IPA from an existing Xcode archive
 <details>
 <summary>Description</summary>
 
-Exports an IPA from an existing iOS and tvOS `.xcarchive` file.
+Exports an IPA from an existing iOS and tvOS `.xcarchive` file. You can add multiple **Export iOS and tvOS Xcode archive** Steps to your Workflows to create multiple different signed .ipa files.
+The Step also logs you into your Apple Developer account based on the [Apple service connection you provide on Bitrise](https://devcenter.bitrise.io/en/accounts/connecting-to-services/apple-services-connection.html) and downloads any provisioning profiles needed for your project based on the **Distribution method**.
+
+### Configuring the Step
+Before you start:
+- Make sure you have connected your [Apple Service account to Bitrise](https://devcenter.bitrise.io/en/accounts/connecting-to-services/apple-services-connection.html).
+Alternatively, you can upload certificates and profiles to Bitrise manually, then use the Certificate and Profile installer step before Xcode Archive
+- Make sure certificates are uploaded to Bitrise's **Code Signing** tab. The right provisioning profiles are automatically downloaded from Apple as part of the automatic code signing process.
+
+To configure the Step:
+1. **Archive Path**: Specifies the archive that should be exported. The input value sets xcodebuild's `-archivePath` option.
+2. **Select a product to distribute**: Decide if an App or an App Clip IPA should be exported.
+3. **Distribution method**: Describes how Xcode should export the archive: development, app-store, ad-hoc, or enterprise.
+
+Under **Automatic code signing**:
+1. **Automatic code signing method**: Select the Apple service connection you want to use for code signing. Available options: `off` if you don't do automatic code signing, `api-key` [if you use API key authorization](https://devcenter.bitrise.io/en/accounts/connecting-to-services/connecting-to-an-apple-service-with-api-key.html), and `apple-id` [if you use Apple ID authorization](https://devcenter.bitrise.io/en/accounts/connecting-to-services/connecting-to-an-apple-service-with-apple-id.html).
+2. **Register test devices on the Apple Developer Portal**: If this input is set, the Step will register the known test devices on Bitrise from team members with the Apple Developer Portal. Note that setting this to `yes` may cause devices to be registered against your limited quantity of test devices in the Apple Developer Portal, which can only be removed once annually during your renewal window.
+3. **The minimum days the Provisioning Profile should be valid**: If this input is set to >0, the managed Provisioning Profile will be renewed if it expires within the configured number of days. Otherwise the Step renews the managed Provisioning Profile if it is expired.
+4. The **Code signing certificate URL**, the **Code signing certificate passphrase**, the **Keychain path**, and the **Keychain password** inputs are automatically populated if certificates are uploaded to Bitrise's **Code Signing** tab. If you store your files in a private repo, you can manually edit these fields.
+
+Under **IPA export configuration**:
+1. **Developer Portal team**: Add the Developer Portal team's name to use for this export. This input defaults to the team used to build the archive.
+2. **Rebuild from bitcode**: For non-App Store exports, should Xcode re-compile the app from bitcode?
+3. **Include bitcode**: For App Store exports, should the package include bitcode?
+4. **iCloud container environment**: If the app is using CloudKit, this input configures the `com.apple.developer.icloud-container-environment` entitlement. Available options vary depending on the type of provisioning profile used, but may include: `Development` and `Production`.
+5. **Export options plist content**: Specifies a `plist` file content that configures archive exporting. If not specified, the Step will auto-generate it.
+
+Under Debugging:
+1. **Verbose logging***: You can set this input to `yes` to produce more informative logs.
 </details>
 
 ## 🧩 Get started
@@ -55,6 +83,7 @@ steps:
 | `export_development_team` | The Developer Portal team to use for this export.  Defaults to the team used to build the archive. |  |  |
 | `compile_bitcode` | For __non-App Store__ exports, should Xcode re-compile the app from bitcode? | required | `yes` |
 | `upload_bitcode` | For __App Store__ exports, should the package include bitcode? | required | `yes` |
+| `manage_version_and_build_number` | Should Xcode manage the app's build number when uploading to App Store Connect. This will change the version and build numbers of all content in your app only if the is an invalid number (like one that was used previously or precedes your current build number). The input will not work if `export options plist content` input has been set. Default set to No. | required | `no` |
 | `export_options_plist_content` | Specifies a plist file content that configures archive exporting.  If not specified, the Step will auto-generate it. |  |  |
 | `verbose_log` | If this input is set, the Step will print additional logs for debugging. | required | `no` |
 </details>

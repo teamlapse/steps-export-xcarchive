@@ -55,10 +55,11 @@ type Inputs struct {
 	BuildURL                  string          `env:"BITRISE_BUILD_URL"`
 	BuildAPIToken             stepconf.Secret `env:"BITRISE_BUILD_API_TOKEN"`
 	// IPA export configuration
-	TeamID                    string `env:"export_development_team"`
-	CompileBitcode            bool   `env:"compile_bitcode,opt[yes,no]"`
-	UploadBitcode             bool   `env:"upload_bitcode,opt[yes,no]"`
-	ExportOptionsPlistContent string `env:"export_options_plist_content"`
+	TeamID                      string `env:"export_development_team"`
+	CompileBitcode              bool   `env:"compile_bitcode,opt[yes,no]"`
+	UploadBitcode               bool   `env:"upload_bitcode,opt[yes,no]"`
+	ManageVersionAndBuildNumber bool   `env:"manage_version_and_build_number"`
+	ExportOptionsPlistContent   string `env:"export_options_plist_content"`
 	// Debugging
 	VerboseLog bool `env:"verbose_log,opt[yes,no]"`
 	// Output export
@@ -66,16 +67,18 @@ type Inputs struct {
 }
 
 type Config struct {
-	ArchivePath               string
-	DeployDir                 string
-	ProductToDistribute       ExportProduct
-	ExportOptionsPlistContent string
-	DistributionMethod        string
-	TeamID                    string
-	UploadBitcode             bool
-	CompileBitcode            bool
-	XcodebuildVersion         models.XcodebuildVersionModel
-	CodesignManager           *codesign.Manager // nil if automatic code signing is "off"
+	ArchivePath                 string
+	DeployDir                   string
+	ProductToDistribute         ExportProduct
+	ExportOptionsPlistContent   string
+	DistributionMethod          string
+	TeamID                      string
+	UploadBitcode               bool
+	CompileBitcode              bool
+	ManageVersionAndBuildNumber bool
+	XcodebuildVersion           models.XcodebuildVersionModel
+	CodesignManager             *codesign.Manager // nil if automatic code signing is "off"
+	VerboseLog                  bool
 }
 
 type RunOut struct {
@@ -318,7 +321,7 @@ func (s Step) Run(opts Config) (RunOut, error) {
 			return RunOut{}, fmt.Errorf("failed to write export options to file, error: %s", err)
 		}
 	} else {
-		exportOptionsContent, err := generateExportOptionsPlist(opts.ProductToDistribute, opts.DistributionMethod, opts.TeamID, opts.UploadBitcode, opts.CompileBitcode, opts.XcodebuildVersion.MajorVersion, archive)
+		exportOptionsContent, err := generateExportOptionsPlist(opts.ProductToDistribute, opts.DistributionMethod, opts.TeamID, opts.UploadBitcode, opts.CompileBitcode, opts.XcodebuildVersion.MajorVersion, archive, opts.ManageVersionAndBuildNumber)
 		if err != nil {
 			return RunOut{}, fmt.Errorf("failed to generate export options, error: %s", err)
 		}

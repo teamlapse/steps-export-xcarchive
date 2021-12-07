@@ -56,7 +56,7 @@ func findIDEDistrubutionLogsPath(output string) (string, error) {
 	return "", nil
 }
 
-func generateExportOptionsPlist(exportProduct ExportProduct, exportMethodStr, teamID string, uploadBitcode, compileBitcode bool, xcodebuildMajorVersion int64, archive xcarchive.IosArchive) (string, error) {
+func generateExportOptionsPlist(exportProduct ExportProduct, exportMethodStr, teamID string, uploadBitcode, compileBitcode bool, xcodebuildMajorVersion int64, archive xcarchive.IosArchive, manageVersionAndBuildNumber bool) (string, error) {
 	log.Printf("Generating export options")
 
 	var productBundleID string
@@ -271,6 +271,12 @@ func generateExportOptionsPlist(exportProduct ExportProduct, exportMethodStr, te
 
 				options.SigningStyle = "manual"
 			}
+		}
+
+		if xcodebuildMajorVersion >= 13 {
+			log.Debugf("Setting flag for managing app version and build number")
+
+			options.ManageAppVersion = manageVersionAndBuildNumber
 		}
 
 		exportOpts = options

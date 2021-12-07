@@ -24,8 +24,15 @@ workflows:
         - branch: master
     - path::./:
         title: Step Test - iOS archive
+        is_always_run: true
         inputs:
         - export_method: development
+        - archive_path: ./archives/ios.xcarchive
+    - path::./:
+        title: Step Test - iOS app store archive
+        is_always_run: true
+        inputs:
+        - export_method: app-store
         - archive_path: ./archives/ios.xcarchive
 
   check:
