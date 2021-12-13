@@ -80,7 +80,7 @@ steps:
 | `passphrase_list` | Passphrases for the provided code signing certificates.  Specify as many passphrases as many Code signing certificate URL provided, separated by a pipe (`\|`) character. | required, sensitive | `$BITRISE_CERTIFICATE_PASSPHRASE` |
 | `keychain_path` | Path to the Keychain where the code signing certificates will be installed. | required | `$HOME/Library/Keychains/login.keychain` |
 | `keychain_password` | Password for the provided Keychain. | required, sensitive | `$BITRISE_KEYCHAIN_PASSWORD` |
-| `export_development_team` | The Developer Portal team to use for this export.  Defaults to the team used to build the archive. |  |  |
+| `export_development_team` | The Developer Portal team to use for this export.  Defaults to the team used to build the archive.  Defining this is also required when Automatic Code Signing is set to `apple-id` and the connected account belongs to multiple teams. |  |  |
 | `compile_bitcode` | For __non-App Store__ exports, should Xcode re-compile the app from bitcode? | required | `yes` |
 | `upload_bitcode` | For __App Store__ exports, should the package include bitcode? | required | `yes` |
 | `manage_version_and_build_number` | Should Xcode manage the app's build number when uploading to App Store Connect. This will change the version and build numbers of all content in your app only if the is an invalid number (like one that was used previously or precedes your current build number). The input will not work if `export options plist content` input has been set. Default set to No. | required | `no` |
