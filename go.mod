@@ -3,10 +3,12 @@ module github.com/bitrise-steplib/steps-export-xcarchive
 go 1.17
 
 require (
-	github.com/bitrise-io/go-steputils v0.0.0-20211205220451-e046db274afb
-	github.com/bitrise-io/go-utils v0.0.0-20211126092127-3a566ee3f420
-	github.com/bitrise-io/go-xcode v0.0.0-20220105112357-9757160a67eb
-	github.com/bitrise-steplib/steps-xcode-archive v0.0.0-20211206161837-eb2baab896e6
+	github.com/bitrise-io/go-steputils v1.0.1
+	github.com/bitrise-io/go-steputils/v2 v2.0.0-alpha.1
+	github.com/bitrise-io/go-utils v1.0.1
+	github.com/bitrise-io/go-utils/v2 v2.0.0-alpha.1
+	github.com/bitrise-io/go-xcode v1.0.1
+	github.com/bitrise-io/go-xcode/v2 v2.0.0-alpha.7
 	howett.net/plist v1.0.0
 )
 

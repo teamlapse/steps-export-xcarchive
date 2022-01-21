@@ -4,6 +4,8 @@ default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
 app:
   envs:
   # secrets
+  - BITRISE_KEYCHAIN_PATH: $BITRISE_KEYCHAIN_PATH
+  - BITRISE_KEYCHAIN_PASSWORD: $BITRISE_KEYCHAIN_PASSWORD
   - BITFALL_APPLE_IOS_CERTIFICATE_URL_LIST: $BITFALL_APPLE_IOS_CERTIFICATE_URL_LIST
   - BITFALL_APPLE_IOS_CERTIFICATE_PASSPHRASE_LIST: $BITFALL_APPLE_IOS_CERTIFICATE_PASSPHRASE_LIST
   - BITFALL_APPLE_PROVISIONING_PROFILE_URL_LIST: $BITFALL_APPLE_PROVISIONING_PROFILE_URL_LIST
@@ -66,6 +68,8 @@ workflows:
         - min_profile_validity: 30
         - certificate_url_list: $BITFALL_APPLE_IOS_CERTIFICATE_URL_LIST
         - passphrase_list: $BITFALL_APPLE_IOS_CERTIFICATE_PASSPHRASE_LIST
+        - keychain_path: $BITRISE_KEYCHAIN_PATH
+        - keychain_password: $BITRISE_KEYCHAIN_PASSWORD
 
   test_auto_codesign:
     before_run:
@@ -91,8 +95,11 @@ workflows:
         - archive_path: ./archives/Fruta-managed.xcarchive
         - product: app
         - automatic_code_signing: api-key
+        - verbose_log: "yes"
         - certificate_url_list: $BITFALL_APPLE_IOS_CERTIFICATE_URL_LIST
         - passphrase_list: $BITFALL_APPLE_IOS_CERTIFICATE_PASSPHRASE_LIST
+        - keychain_path: $BITRISE_KEYCHAIN_PATH
+        - keychain_password: $BITRISE_KEYCHAIN_PASSWORD
     - path::./:
         title: Step Test - Multi Target API Key auto signing
         inputs:
@@ -103,6 +110,8 @@ workflows:
         - min_profile_validity: 30
         - certificate_url_list: $BITFALL_APPLE_IOS_CERTIFICATE_URL_LIST
         - passphrase_list: $BITFALL_APPLE_IOS_CERTIFICATE_PASSPHRASE_LIST
+        - keychain_path: $BITRISE_KEYCHAIN_PATH
+        - keychain_password: $BITRISE_KEYCHAIN_PASSWORD
     - path::./:
         title: Step Test - TV OS Apple ID auto signing
         inputs:
@@ -113,6 +122,8 @@ workflows:
         - certificate_url_list: $BITFALL_APPLE_IOS_CERTIFICATE_URL_LIST
         - passphrase_list: $BITFALL_APPLE_IOS_CERTIFICATE_PASSPHRASE_LIST
         - export_development_team: $TEAM_ID
+        - keychain_path: $BITRISE_KEYCHAIN_PATH
+        - keychain_password: $BITRISE_KEYCHAIN_PASSWORD
 
 
   test_ipa_exports:
@@ -151,13 +162,20 @@ workflows:
   _setup:
     steps:
     - script:
-        title: Clean _tmp an profile dir
+        title: Remove provisioning profiles from previous runs
+        run_if: .IsCI
         inputs:
         - content: |-
             #!/usr/bin/env bash
-            set -e
-            rm -rf ./_tmp
+            set -ex
             rm -rf ~/Library/MobileDevice/Provisioning Profiles
+    - script:
+        title: Clean _tmp dir
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -ex
+            rm -rf "./_tmp"
     - change-workdir:
         title: Switch working dir to _tmp
         inputs:

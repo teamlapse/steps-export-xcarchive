@@ -7,23 +7,25 @@ import (
 	"strings"
 
 	"github.com/bitrise-io/go-steputils/output"
-	"github.com/bitrise-io/go-steputils/stepconf"
-	"github.com/bitrise-io/go-utils/command"
-	"github.com/bitrise-io/go-utils/env"
+	"github.com/bitrise-io/go-steputils/v2/stepconf"
+	v1command "github.com/bitrise-io/go-utils/command"
 	"github.com/bitrise-io/go-utils/fileutil"
-	"github.com/bitrise-io/go-utils/log"
+	v1log "github.com/bitrise-io/go-utils/log"
 	"github.com/bitrise-io/go-utils/pathutil"
 	"github.com/bitrise-io/go-utils/retry"
-	"github.com/bitrise-io/go-xcode/autocodesign/certdownloader"
-	"github.com/bitrise-io/go-xcode/autocodesign/codesignasset"
-	"github.com/bitrise-io/go-xcode/autocodesign/devportalclient"
-	"github.com/bitrise-io/go-xcode/autocodesign/localcodesignasset"
-	"github.com/bitrise-io/go-xcode/codesign"
+	"github.com/bitrise-io/go-utils/v2/command"
+	"github.com/bitrise-io/go-utils/v2/env"
+	"github.com/bitrise-io/go-utils/v2/log"
 	"github.com/bitrise-io/go-xcode/devportalservice"
 	"github.com/bitrise-io/go-xcode/models"
 	"github.com/bitrise-io/go-xcode/profileutil"
 	"github.com/bitrise-io/go-xcode/utility"
-	"github.com/bitrise-io/go-xcode/xcarchive"
+	"github.com/bitrise-io/go-xcode/v2/autocodesign/certdownloader"
+	"github.com/bitrise-io/go-xcode/v2/autocodesign/codesignasset"
+	"github.com/bitrise-io/go-xcode/v2/autocodesign/devportalclient"
+	"github.com/bitrise-io/go-xcode/v2/autocodesign/localcodesignasset"
+	"github.com/bitrise-io/go-xcode/v2/codesign"
+	"github.com/bitrise-io/go-xcode/v2/xcarchive"
 	"github.com/bitrise-io/go-xcode/xcodebuild"
 	"howett.net/plist"
 )
@@ -108,7 +110,7 @@ func (s Step) ProcessInputs() (Config, error) {
 		return Config{}, fmt.Errorf("issue with input: %s", err)
 	}
 
-	log.SetEnableDebugLog(inputs.VerboseLog)
+	v1log.SetEnableDebugLog(inputs.VerboseLog)
 	s.logger.EnableDebugLog(inputs.VerboseLog)
 
 	productToDistribute, err := ParseExportProduct(inputs.ProductToDistribute)
@@ -122,8 +124,8 @@ func (s Step) ProcessInputs() (Config, error) {
 	trimmedExportOptions := strings.TrimSpace(inputs.ExportOptionsPlistContent)
 	if inputs.ExportOptionsPlistContent != trimmedExportOptions {
 		inputs.ExportOptionsPlistContent = trimmedExportOptions
-		log.Warnf("ExportOptionsPlistContent contains leading and trailing white space, removed:")
-		log.Printf(inputs.ExportOptionsPlistContent)
+		s.logger.Warnf("ExportOptionsPlistContent contains leading and trailing white space, removed:")
+		s.logger.Printf(inputs.ExportOptionsPlistContent)
 		fmt.Println()
 	}
 	if inputs.ExportOptionsPlistContent != "" {
@@ -136,16 +138,16 @@ func (s Step) ProcessInputs() (Config, error) {
 	trimmedTeamID := strings.TrimSpace(inputs.TeamID)
 	if inputs.TeamID != trimmedTeamID {
 		inputs.TeamID = trimmedTeamID
-		log.Warnf("TeamID contains leading and trailing white space, removed: %s", inputs.TeamID)
+		s.logger.Warnf("TeamID contains leading and trailing white space, removed: %s", inputs.TeamID)
 	}
 
-	log.Infof("Step determined configs:")
+	s.logger.Infof("Step determined configs:")
 
-	xcodebuildVersion, err := utility.GetXcodeVersion(s.commandFactory)
+	xcodebuildVersion, err := utility.GetXcodeVersion()
 	if err != nil {
 		return Config{}, fmt.Errorf("failed to determine Xcode version, error: %s", err)
 	}
-	log.Printf("- xcodebuildVersion: %s (%s)", xcodebuildVersion.Version, xcodebuildVersion.BuildVersion)
+	s.logger.Printf("- xcodebuildVersion: %s (%s)", xcodebuildVersion.Version, xcodebuildVersion.BuildVersion)
 
 	var codesignManager *codesign.Manager
 	if inputs.CodeSigningAuthSource != codeSignSourceOff {
@@ -242,7 +244,7 @@ func (s Step) createCodesignManager(inputs Inputs, xcodeMajorVersion int) (codes
 func (s Step) Run(opts Config) (RunOut, error) {
 	var authOptions *xcodebuild.AuthenticationParams = nil
 	if opts.CodesignManager != nil {
-		log.Infof("Preparing code signing assets (certificates, profiles)")
+		s.logger.Infof("Preparing code signing assets (certificates, profiles)")
 
 		xcodebuildAuthParams, err := opts.CodesignManager.PrepareCodesigning()
 		if err != nil {
@@ -257,7 +259,7 @@ func (s Step) Run(opts Config) (RunOut, error) {
 
 			defer func() {
 				if err := os.Remove(privateKey); err != nil {
-					log.Warnf("failed to remove private key file: %s", err)
+					s.logger.Warnf("failed to remove private key file: %s", err)
 				}
 			}()
 
@@ -268,7 +270,7 @@ func (s Step) Run(opts Config) (RunOut, error) {
 			}
 		}
 	} else {
-		log.Infof("Automatic code signing is disabled, skipped downloading code sign assets")
+		s.logger.Infof("Automatic code signing is disabled, skipped downloading code sign assets")
 	}
 	fmt.Println()
 
@@ -304,17 +306,17 @@ func (s Step) Run(opts Config) (RunOut, error) {
 	}
 
 	fmt.Println()
-	log.Infof("Archive info:")
-	log.Printf("team: %s (%s)", mainApplication.ProvisioningProfile.TeamName, mainApplication.ProvisioningProfile.TeamID)
-	log.Printf("profile: %s (%s)", mainApplication.ProvisioningProfile.Name, mainApplication.ProvisioningProfile.UUID)
-	log.Printf("export: %s", archiveExportMethod)
-	log.Printf("Xcode managed profile: %v", archiveCodeSignIsXcodeManaged)
+	s.logger.Infof("Archive info:")
+	s.logger.Printf("team: %s (%s)", mainApplication.ProvisioningProfile.TeamName, mainApplication.ProvisioningProfile.TeamID)
+	s.logger.Printf("profile: %s (%s)", mainApplication.ProvisioningProfile.Name, mainApplication.ProvisioningProfile.UUID)
+	s.logger.Printf("export: %s", archiveExportMethod)
+	s.logger.Printf("Xcode managed profile: %v", archiveCodeSignIsXcodeManaged)
 	fmt.Println()
 
-	log.Infof("Exporting with export options...")
+	s.logger.Infof("Exporting with export options...")
 
 	if opts.ExportOptionsPlistContent != "" {
-		log.Printf("Export options content provided, using it:")
+		s.logger.Printf("Export options content provided, using it:")
 		fmt.Println(opts.ExportOptionsPlistContent)
 
 		if err := fileutil.WriteStringToFile(exportOptionsPath, opts.ExportOptionsPlistContent); err != nil {
@@ -326,7 +328,7 @@ func (s Step) Run(opts Config) (RunOut, error) {
 			return RunOut{}, fmt.Errorf("failed to generate export options, error: %s", err)
 		}
 
-		log.Printf("\ngenerated export options content:\n%s", exportOptionsContent)
+		s.logger.Printf("\ngenerated export options content:\n%s", exportOptionsContent)
 
 		if err := fileutil.WriteStringToFile(exportOptionsPath, exportOptionsContent); err != nil {
 			return RunOut{}, fmt.Errorf("failed to write export options to file, error: %s", err)
@@ -340,7 +342,7 @@ func (s Step) Run(opts Config) (RunOut, error) {
 		return RunOut{}, fmt.Errorf("failed to create tmp dir, error: %s", err)
 	}
 
-	exportCmd := xcodebuild.NewExportCommand(s.commandFactory)
+	exportCmd := xcodebuild.NewExportCommand()
 	exportCmd.SetArchivePath(opts.ArchivePath)
 	exportCmd.SetExportDir(tmpDir)
 	exportCmd.SetExportOptionsPlist(exportOptionsPath)
@@ -348,17 +350,17 @@ func (s Step) Run(opts Config) (RunOut, error) {
 		exportCmd.SetAuthentication(*authOptions)
 	}
 
-	log.Donef("$ %s", exportCmd.PrintableCmd())
+	s.logger.Donef("$ %s", exportCmd.PrintableCmd())
 	fmt.Println()
 
 	var ideDistrubutionLogDir string
 	if xcodebuildOut, err := exportCmd.RunAndReturnOutput(); err != nil {
 		// xcdistributionlogs
 		if logsDirPth, err := findIDEDistrubutionLogsPath(xcodebuildOut); err != nil {
-			log.Warnf("Failed to find xcdistributionlogs, error: %s", err)
+			s.logger.Warnf("Failed to find xcdistributionlogs, error: %s", err)
 		} else {
 			ideDistrubutionLogDir = logsDirPth
-			log.Warnf(`If you can't find the reason of the error in the log, please check the xcdistributionlogs
+			s.logger.Warnf(`If you can't find the reason of the error in the log, please check the xcdistributionlogs
 The logs directory will be stored in $BITRISE_DEPLOY_DIR, and its full path
 will be available in the $BITRISE_IDEDISTRIBUTION_LOGS_PATH environment variable`)
 		}
@@ -385,7 +387,7 @@ func (s Step) ExportOutput(opts ExportOpts) error {
 	if opts.IDEDistrubutionLogDir != "" {
 		ideDistributionLogsZipPath := filepath.Join(opts.DeployDir, "xcodebuild.xcdistributionlogs.zip")
 		if err := output.ZipAndExportOutput([]string{opts.IDEDistrubutionLogDir}, ideDistributionLogsZipPath, bitriseIDEDistributionLogsPthEnvKey); err != nil {
-			log.Warnf("Failed to export %s, error: %s", bitriseIDEDistributionLogsPthEnvKey, err)
+			s.logger.Warnf("Failed to export %s, error: %s", bitriseIDEDistributionLogsPthEnvKey, err)
 		}
 
 		return nil
@@ -402,17 +404,17 @@ func (s Step) ExportOutput(opts ExportOpts) error {
 		return fmt.Errorf("no ipa found with pattern: %s", pattern)
 	} else if len(ipas) == 1 {
 		exportedIPAPath = filepath.Join(opts.DeployDir, filepath.Base(ipas[0]))
-		if err := command.CopyFile(ipas[0], exportedIPAPath); err != nil {
+		if err := v1command.CopyFile(ipas[0], exportedIPAPath); err != nil {
 			return fmt.Errorf("failed to copy (%s) -> (%s), error: %s", ipas[0], exportedIPAPath, err)
 		}
 	} else {
-		log.Warnf("More than 1 .ipa file found")
+		s.logger.Warnf("More than 1 .ipa file found")
 
 		for _, ipa := range ipas {
 			base := filepath.Base(ipa)
 			deployPth := filepath.Join(opts.DeployDir, base)
 
-			if err := command.CopyFile(ipa, deployPth); err != nil {
+			if err := v1command.CopyFile(ipa, deployPth); err != nil {
 				return fmt.Errorf("failed to copy (%s) -> (%s), error: %s", ipas[0], ipa, err)
 			}
 			exportedIPAPath = ipa
@@ -423,10 +425,10 @@ func (s Step) ExportOutput(opts ExportOpts) error {
 		return fmt.Errorf("failed to export %s, error: %s", bitriseIPAPthEnvKey, err)
 	}
 
-	log.Donef("The ipa path is now available in the Environment Variable: %s (value: %s)", bitriseIPAPthEnvKey, exportedIPAPath)
+	s.logger.Donef("The ipa path is now available in the Environment Variable: %s (value: %s)", bitriseIPAPthEnvKey, exportedIPAPath)
 
 	if len(opts.AppDSYMs) == 0 {
-		log.Warnf("No dSYM was found in the archive")
+		s.logger.Warnf("No dSYM was found in the archive")
 		return nil
 	}
 
@@ -435,7 +437,7 @@ func (s Step) ExportOutput(opts ExportOpts) error {
 		return fmt.Errorf("failed to export %s, error: %s", bitriseDSYMPthEnvKey, err)
 	}
 
-	log.Donef("The dSYM zip path is now available in the Environment Variable: %s (value: %s)", bitriseDSYMPthEnvKey, dsymZipPath)
+	s.logger.Donef("The dSYM zip path is now available in the Environment Variable: %s (value: %s)", bitriseDSYMPthEnvKey, dsymZipPath)
 
 	return nil
 }
@@ -451,6 +453,7 @@ func RunStep() error {
 
 	config, err := step.ProcessInputs()
 	if err != nil {
+		step.logger.Errorf(err.Error())
 		return err
 	}
 
@@ -466,9 +469,11 @@ func RunStep() error {
 	exportErr := step.ExportOutput(exportOpts)
 
 	if runErr != nil {
+		step.logger.Errorf(runErr.Error())
 		return runErr
 	}
 	if exportErr != nil {
+		step.logger.Errorf(exportErr.Error())
 		return exportErr
 	}
 
@@ -477,7 +482,6 @@ func RunStep() error {
 
 func main() {
 	if err := RunStep(); err != nil {
-		log.Errorf(err.Error())
 		os.Exit(1)
 	}
 }

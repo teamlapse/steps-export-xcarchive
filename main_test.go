@@ -4,18 +4,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bitrise-io/go-utils/command"
-	"github.com/bitrise-io/go-utils/env"
 	"github.com/bitrise-io/go-xcode/utility"
-	"github.com/bitrise-io/go-xcode/xcarchive"
+	"github.com/bitrise-io/go-xcode/v2/xcarchive"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestConfig_generateExportOptions_plist(t *testing.T) {
 	// Given
-	envRepository := env.NewRepository()
-	commandFactory := command.NewFactory(envRepository)
-	xcodebuildVersion, _ := utility.GetXcodeVersion(commandFactory)
+	xcodebuildVersion, _ := utility.GetXcodeVersion()
 	archive, _ := xcarchive.NewIosArchive("configs.ArchivePath")
 
 	// When
@@ -31,9 +27,7 @@ func TestConfig_generateExportOptions_plist(t *testing.T) {
 
 func TestConfig_generateExportOptions_plist_validField(t *testing.T) {
 	// Given
-	envRepository := env.NewRepository()
-	commandFactory := command.NewFactory(envRepository)
-	xcodebuildVersion, _ := utility.GetXcodeVersion(commandFactory)
+	xcodebuildVersion, _ := utility.GetXcodeVersion()
 	archive, _ := xcarchive.NewIosArchive("configs.ArchivePath")
 
 	// When
@@ -48,9 +42,7 @@ func TestConfig_generateExportOptions_plist_validField(t *testing.T) {
 
 func TestConfig_generateExportOptions_plist_updateVersionAndBuildSetToFalse(t *testing.T) {
 	// Given
-	envRepository := env.NewRepository()
-	commandFactory := command.NewFactory(envRepository)
-	xcodebuildVersion, _ := utility.GetXcodeVersion(commandFactory)
+	xcodebuildVersion, _ := utility.GetXcodeVersion()
 	archive, _ := xcarchive.NewIosArchive("configs.ArchivePath")
 
 	// When
