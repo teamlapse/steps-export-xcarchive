@@ -8,6 +8,7 @@ app:
   - BITRISE_KEYCHAIN_PASSWORD: $BITRISE_KEYCHAIN_PASSWORD
   - BITFALL_APPLE_IOS_CERTIFICATE_URL_LIST: $BITFALL_APPLE_IOS_CERTIFICATE_URL_LIST
   - BITFALL_APPLE_IOS_CERTIFICATE_PASSPHRASE_LIST: $BITFALL_APPLE_IOS_CERTIFICATE_PASSPHRASE_LIST
+  - BITFALL_APPLE_IOS_CERTIFICATE_NOPASSPHRASE_URL: $BITFALL_APPLE_IOS_CERTIFICATE_NOPASSPHRASE_URL
   - BITFALL_APPLE_PROVISIONING_PROFILE_URL_LIST: $BITFALL_APPLE_PROVISIONING_PROFILE_URL_LIST
   - SAMPLE_ARTIFACTS_URL: https://github.com/bitrise-io/sample-artifacts.git
   - SAMPLE_ARTIFACTS_BRANCH: master
@@ -48,6 +49,23 @@ app:
       </plist>
 
 workflows:
+  test_single_certificate_no_passphrase:
+    before_run:
+    - _setup
+    steps:
+    - path::./:
+        title: Step Test
+        inputs:
+        - distribution_method: development
+        - archive_path: ./archives/Fruta.xcarchive
+        - product: app
+        - automatic_code_signing: api-key
+        - certificate_url_list: $BITFALL_APPLE_IOS_CERTIFICATE_NOPASSPHRASE_URL
+        - passphrase_list: ""
+        - keychain_path: $BITRISE_KEYCHAIN_PATH
+        - keychain_password: $BITRISE_KEYCHAIN_PASSWORD
+        - export_development_team: $TEAM_ID
+
   test_auto_codesign_with_manual_assets:
     before_run:
     - _setup
@@ -124,7 +142,6 @@ workflows:
         - export_development_team: $TEAM_ID
         - keychain_path: $BITRISE_KEYCHAIN_PATH
         - keychain_password: $BITRISE_KEYCHAIN_PASSWORD
-
 
   test_ipa_exports:
     before_run:
