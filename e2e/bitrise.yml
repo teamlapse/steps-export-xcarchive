@@ -10,6 +10,9 @@ app:
   - BITFALL_APPLE_IOS_CERTIFICATE_PASSPHRASE_LIST: $BITFALL_APPLE_IOS_CERTIFICATE_PASSPHRASE_LIST
   - BITFALL_APPLE_IOS_CERTIFICATE_NOPASSPHRASE_URL: $BITFALL_APPLE_IOS_CERTIFICATE_NOPASSPHRASE_URL
   - BITFALL_APPLE_PROVISIONING_PROFILE_URL_LIST: $BITFALL_APPLE_PROVISIONING_PROFILE_URL_LIST
+  - BITFALL_APPSTORECONNECT_API_KEY_URL: $BITFALL_APPSTORECONNECT_API_KEY_URL
+  - BITFALL_APPSTORECONNECT_API_KEY_ID: $BITFALL_APPSTORECONNECT_API_KEY_ID
+  - BITFALL_APPSTORECONNECT_API_KEY_ISSUER_ID: $BITFALL_APPSTORECONNECT_API_KEY_ISSUER_ID
   - SAMPLE_ARTIFACTS_URL: https://github.com/bitrise-io/sample-artifacts.git
   - SAMPLE_ARTIFACTS_BRANCH: master
   - TEAM_ID: 72SA8V3WYL
@@ -49,6 +52,44 @@ app:
       </plist>
 
 workflows:
+  test_auto_codesign_override:
+    description: Test automatic codesign with API key and overriding connection params via step inputs
+    before_run:
+    - _setup
+    steps:
+    - script:
+        title: Unset Bitrise API connection env vars
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -ex
+            envman add --key BITRISE_BUILD_URL_BACKUP --value $BITRISE_BUILD_URL
+            envman add --key BITRISE_BUILD_API_TOKEN_BACKUP --value $BITRISE_BUILD_API_TOKEN
+            envman unset --key BITRISE_BUILD_URL
+            envman unset --key BITRISE_BUILD_API_TOKEN
+    - path::./:
+        title: Step Test - Multi Target API Key auto signing
+        inputs:
+        - distribution_method: development
+        - archive_path: ./archives/Fruta-managed.xcarchive
+        - product: app
+        - automatic_code_signing: api-key
+        - verbose_log: "yes"
+        - certificate_url_list: $BITFALL_APPLE_IOS_CERTIFICATE_URL_LIST
+        - passphrase_list: $BITFALL_APPLE_IOS_CERTIFICATE_PASSPHRASE_LIST
+        - keychain_path: $BITRISE_KEYCHAIN_PATH
+        - keychain_password: $BITRISE_KEYCHAIN_PASSWORD
+        - api_key_path: $BITFALL_APPSTORECONNECT_API_KEY_URL
+        - api_key_id: $BITFALL_APPSTORECONNECT_API_KEY_ID
+        - api_key_issuer_id: $BITFALL_APPSTORECONNECT_API_KEY_ISSUER_ID
+    - script:
+        title: Restore Bitrise API connection env vars
+        inputs:
+        - content: |-
+            set -ex
+            envman add --key BITRISE_BUILD_URL --value $BITRISE_BUILD_URL_BACKUP
+            envman add --key BITRISE_BUILD_API_TOKEN --value $BITRISE_BUILD_API_TOKEN_BACKUP
+
   test_single_certificate_no_passphrase:
     before_run:
     - _setup

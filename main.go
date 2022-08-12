@@ -16,6 +16,7 @@ import (
 	"github.com/bitrise-io/go-utils/v2/command"
 	"github.com/bitrise-io/go-utils/v2/env"
 	"github.com/bitrise-io/go-utils/v2/log"
+	"github.com/bitrise-io/go-utils/v2/retryhttp"
 	"github.com/bitrise-io/go-xcode/devportalservice"
 	"github.com/bitrise-io/go-xcode/models"
 	"github.com/bitrise-io/go-xcode/profileutil"
@@ -24,6 +25,7 @@ import (
 	"github.com/bitrise-io/go-xcode/v2/autocodesign/codesignasset"
 	"github.com/bitrise-io/go-xcode/v2/autocodesign/devportalclient"
 	"github.com/bitrise-io/go-xcode/v2/autocodesign/localcodesignasset"
+	"github.com/bitrise-io/go-xcode/v2/autocodesign/profiledownloader"
 	"github.com/bitrise-io/go-xcode/v2/codesign"
 	"github.com/bitrise-io/go-xcode/v2/xcarchive"
 	"github.com/bitrise-io/go-xcode/xcodebuild"
@@ -62,6 +64,10 @@ type Inputs struct {
 	UploadBitcode               bool   `env:"upload_bitcode,opt[yes,no]"`
 	ManageVersionAndBuildNumber bool   `env:"manage_version_and_build_number"`
 	ExportOptionsPlistContent   string `env:"export_options_plist_content"`
+	// App Store Connect connection override
+	APIKeyPath     stepconf.Secret `env:"api_key_path"`
+	APIKeyID       string          `env:"api_key_id"`
+	APIKeyIssuerID string          `env:"api_key_issuer_id"`
 	// Debugging
 	VerboseLog bool `env:"verbose_log,opt[yes,no]"`
 	// Output export
@@ -205,13 +211,19 @@ func (s Step) createCodesignManager(inputs Inputs, xcodeMajorVersion int) (codes
 
 	var serviceConnection *devportalservice.AppleDeveloperConnection = nil
 	devPortalClientFactory := devportalclient.NewFactory(s.logger)
-	if authType == codesign.APIKeyAuth || authType == codesign.AppleIDAuth {
+	if inputs.BuildURL != "" && inputs.BuildAPIToken != "" {
 		if serviceConnection, err = devPortalClientFactory.CreateBitriseConnection(inputs.BuildURL, string(inputs.BuildAPIToken)); err != nil {
 			return codesign.Manager{}, err
 		}
 	}
 
-	appleAuthCredentials, err := codesign.SelectConnectionCredentials(authType, serviceConnection, s.logger)
+	connectionInputs := codesign.ConnectionOverrideInputs{
+		APIKeyPath:     inputs.APIKeyPath,
+		APIKeyID:       inputs.APIKeyID,
+		APIKeyIssuerID: inputs.APIKeyIssuerID,
+	}
+
+	appleAuthCredentials, err := codesign.SelectConnectionCredentials(authType, serviceConnection, connectionInputs, s.logger)
 	if err != nil {
 		return codesign.Manager{}, err
 	}
@@ -228,12 +240,18 @@ func (s Step) createCodesignManager(inputs Inputs, xcodeMajorVersion int) (codes
 		IsVerboseLog:               inputs.VerboseLog,
 	}
 
+	var testDevices []devportalservice.TestDevice
+	if serviceConnection != nil {
+		testDevices = serviceConnection.TestDevices
+	}
+
 	return codesign.NewManagerWithArchive(
 		opts,
 		appleAuthCredentials,
-		serviceConnection,
+		testDevices,
 		devPortalClientFactory,
 		certdownloader.NewDownloader(codesignConfig.CertificatesAndPassphrases, retry.NewHTTPClient().StandardClient()),
+		profiledownloader.New([]string{}, retryhttp.NewClient(s.logger).StandardClient()), // not supported for now
 		codesignasset.NewWriter(codesignConfig.Keychain),
 		localcodesignasset.NewManager(localcodesignasset.NewProvisioningProfileProvider(), localcodesignasset.NewProvisioningProfileConverter()),
 		archive,
