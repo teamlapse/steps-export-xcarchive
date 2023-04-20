@@ -39,7 +39,7 @@ app:
               <string>BitriseBot-Wildcard</string>
             </dict>
             <key>signingCertificate</key>
-            <string>iPhone Developer: Dev Portal Bot Bitrise (E89JV3W9K4)</string>
+            <string>iPhone Developer: Tooling Bot Bitrise (E89JV3W9K4)</string>
             <key>signingStyle</key>
             <string>manual</string>
             <key>stripSwiftSymbols</key>
