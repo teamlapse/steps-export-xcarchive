@@ -7,7 +7,7 @@ require (
 	github.com/bitrise-io/go-steputils/v2 v2.0.0-alpha.2
 	github.com/bitrise-io/go-utils v1.0.2
 	github.com/bitrise-io/go-utils/v2 v2.0.0-alpha.11
-	github.com/bitrise-io/go-xcode v1.0.9
+	github.com/bitrise-io/go-xcode v1.0.11
 	github.com/bitrise-io/go-xcode/v2 v2.0.0-alpha.25
 	howett.net/plist v1.0.0
 )

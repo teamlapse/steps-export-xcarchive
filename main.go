@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/bitrise-io/go-steputils/output"
 	"github.com/bitrise-io/go-steputils/v2/stepconf"
@@ -55,6 +56,7 @@ type Inputs struct {
 	KeychainPath              string          `env:"keychain_path"`
 	KeychainPassword          stepconf.Secret `env:"keychain_password"`
 	RegisterTestDevices       bool            `env:"register_test_devices,opt[yes,no]"`
+	TestDeviceListPath        string          `env:"test_device_list_path"`
 	MinDaysProfileValid       int             `env:"min_profile_validity,required"`
 	BuildURL                  string          `env:"BITRISE_BUILD_URL"`
 	BuildAPIToken             stepconf.Secret `env:"BITRISE_BUILD_API_TOKEN"`
@@ -241,7 +243,12 @@ func (s Step) createCodesignManager(inputs Inputs, xcodeMajorVersion int) (codes
 	}
 
 	var testDevices []devportalservice.TestDevice
-	if serviceConnection != nil {
+	if inputs.TestDeviceListPath != "" {
+		testDevices, err = devportalservice.ParseTestDevicesFromFile(inputs.TestDeviceListPath, time.Now())
+		if err != nil {
+			return codesign.Manager{}, fmt.Errorf("failed to process device list (%s): %s", inputs.TestDeviceListPath, err)
+		}
+	} else if serviceConnection != nil {
 		testDevices = serviceConnection.TestDevices
 	}
 
