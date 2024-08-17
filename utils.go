@@ -76,6 +76,8 @@ func generateExportOptionsPlist(exportProduct ExportProduct, exportMethodStr, te
 		productBundleID = archive.Application.ClipApplication.BundleIdentifier()
 	}
 
+	log.Printf("productBundleID: %s", productBundleID)
+
 	parsedMethod, err := exportoptions.ParseMethod(exportMethodStr)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse export options, error: %s", err)
@@ -90,6 +92,7 @@ func generateExportOptionsPlist(exportProduct ExportProduct, exportMethodStr, te
 		log.Printf("Target Bundle ID - Entitlements map")
 		var bundleIDs []string
 		for bundleID, entitlements := range archive.BundleIDEntitlementsMap() {
+			log.Printf("appending bundle ID: %s", bundleID)
 			bundleIDs = append(bundleIDs, bundleID)
 
 			entitlementKeys := []string{}
