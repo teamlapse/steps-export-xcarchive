@@ -97,6 +97,7 @@ type IosWatchApplication struct {
 // IosClipApplication ...
 type IosClipApplication struct {
 	IosBaseApplication
+	Extensions []IosExtension
 }
 
 // NewIosWatchApplication ...
@@ -134,8 +135,24 @@ func NewIosClipApplication(path string) (IosClipApplication, error) {
 		return IosClipApplication{}, err
 	}
 
+	extensions := []IosExtension{}
+	pattern := filepath.Join(pathutil.EscapeGlobPath(path), "PlugIns/*.appex")
+	pths, err := filepath.Glob(pattern)
+	if err != nil {
+		return IosClipApplication{}, fmt.Errorf("failed to search for watch application's extensions using pattern: %s, error: %s", pattern, err)
+	}
+	for _, pth := range pths {
+		extension, err := NewIosExtension(pth)
+		if err != nil {
+			return IosClipApplication{}, err
+		}
+
+		extensions = append(extensions, extension)
+	}
+
 	return IosClipApplication{
 		IosBaseApplication: baseApp,
+		Extensions:         extensions,
 	}, nil
 }
 
@@ -330,6 +347,11 @@ func (archive IosArchive) BundleIDEntitlementsMap() map[string]plistutil.PlistDa
 
 		bundleID := clipApplication.BundleIdentifier()
 		bundleIDEntitlementsMap[bundleID] = clipApplication.Entitlements
+
+		for _, plugin := range clipApplication.Extensions {
+			bundleID := plugin.BundleIdentifier()
+			bundleIDEntitlementsMap[bundleID] = plugin.Entitlements
+		}
 	}
 
 	return bundleIDEntitlementsMap
@@ -364,6 +386,11 @@ func (archive IosArchive) BundleIDProfileInfoMap() map[string]profileutil.Provis
 
 		bundleID := clipApplication.BundleIdentifier()
 		bundleIDProfileMap[bundleID] = clipApplication.ProvisioningProfile
+
+		for _, plugin := range clipApplication.Extensions {
+			bundleID := plugin.BundleIdentifier()
+			bundleIDProfileMap[bundleID] = plugin.ProvisioningProfile
+		}
 	}
 
 	return bundleIDProfileMap
