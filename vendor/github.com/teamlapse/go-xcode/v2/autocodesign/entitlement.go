@@ -2,7 +2,6 @@ package autocodesign
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/bitrise-io/go-utils/log"
 	"github.com/bitrise-io/go-utils/sliceutil"
