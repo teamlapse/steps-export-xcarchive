@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bitrise-io/go-xcode/utility"
-	"github.com/bitrise-io/go-xcode/v2/xcarchive"
+	"github.com/teamlapse/go-xcode/utility"
+	"github.com/teamlapse/go-xcode/v2/xcarchive"
 	"github.com/stretchr/testify/assert"
 )
 

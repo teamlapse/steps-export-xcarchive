@@ -37,40 +37,40 @@ github.com/bitrise-io/go-utils/v2/log
 github.com/bitrise-io/go-utils/v2/log/colorstring
 github.com/bitrise-io/go-utils/v2/pathutil
 github.com/bitrise-io/go-utils/v2/retryhttp
-# github.com/bitrise-io/go-xcode v1.0.18
+# github.com/teamlapse/go-xcode v1.0.18
 ## explicit; go 1.20
-github.com/bitrise-io/go-xcode/appleauth
-github.com/bitrise-io/go-xcode/certificateutil
-github.com/bitrise-io/go-xcode/devportalservice
-github.com/bitrise-io/go-xcode/export
-github.com/bitrise-io/go-xcode/exportoptions
-github.com/bitrise-io/go-xcode/models
-github.com/bitrise-io/go-xcode/plistutil
-github.com/bitrise-io/go-xcode/profileutil
-github.com/bitrise-io/go-xcode/utility
-github.com/bitrise-io/go-xcode/xcarchive
-github.com/bitrise-io/go-xcode/xcodebuild
-github.com/bitrise-io/go-xcode/xcodeproject/schemeint
-github.com/bitrise-io/go-xcode/xcodeproject/serialized
-github.com/bitrise-io/go-xcode/xcodeproject/xcodeproj
-github.com/bitrise-io/go-xcode/xcodeproject/xcscheme
-github.com/bitrise-io/go-xcode/xcodeproject/xcworkspace
-# github.com/bitrise-io/go-xcode/v2 v2.0.0-alpha.45
+github.com/teamlapse/go-xcode/appleauth
+github.com/teamlapse/go-xcode/certificateutil
+github.com/teamlapse/go-xcode/devportalservice
+github.com/teamlapse/go-xcode/export
+github.com/teamlapse/go-xcode/exportoptions
+github.com/teamlapse/go-xcode/models
+github.com/teamlapse/go-xcode/plistutil
+github.com/teamlapse/go-xcode/profileutil
+github.com/teamlapse/go-xcode/utility
+github.com/teamlapse/go-xcode/xcarchive
+github.com/teamlapse/go-xcode/xcodebuild
+github.com/teamlapse/go-xcode/xcodeproject/schemeint
+github.com/teamlapse/go-xcode/xcodeproject/serialized
+github.com/teamlapse/go-xcode/xcodeproject/xcodeproj
+github.com/teamlapse/go-xcode/xcodeproject/xcscheme
+github.com/teamlapse/go-xcode/xcodeproject/xcworkspace
+# github.com/teamlapse/go-xcode/v2 v2.0.0-alpha.45
 ## explicit; go 1.20
-github.com/bitrise-io/go-xcode/v2/autocodesign
-github.com/bitrise-io/go-xcode/v2/autocodesign/certdownloader
-github.com/bitrise-io/go-xcode/v2/autocodesign/codesignasset
-github.com/bitrise-io/go-xcode/v2/autocodesign/devportalclient
-github.com/bitrise-io/go-xcode/v2/autocodesign/devportalclient/appstoreconnect
-github.com/bitrise-io/go-xcode/v2/autocodesign/devportalclient/appstoreconnectclient
-github.com/bitrise-io/go-xcode/v2/autocodesign/devportalclient/spaceship
-github.com/bitrise-io/go-xcode/v2/autocodesign/devportalclient/time
-github.com/bitrise-io/go-xcode/v2/autocodesign/keychain
-github.com/bitrise-io/go-xcode/v2/autocodesign/localcodesignasset
-github.com/bitrise-io/go-xcode/v2/autocodesign/profiledownloader
-github.com/bitrise-io/go-xcode/v2/autocodesign/projectmanager
-github.com/bitrise-io/go-xcode/v2/codesign
-github.com/bitrise-io/go-xcode/v2/xcarchive
+github.com/teamlapse/go-xcode/v2/autocodesign
+github.com/teamlapse/go-xcode/v2/autocodesign/certdownloader
+github.com/teamlapse/go-xcode/v2/autocodesign/codesignasset
+github.com/teamlapse/go-xcode/v2/autocodesign/devportalclient
+github.com/teamlapse/go-xcode/v2/autocodesign/devportalclient/appstoreconnect
+github.com/teamlapse/go-xcode/v2/autocodesign/devportalclient/appstoreconnectclient
+github.com/teamlapse/go-xcode/v2/autocodesign/devportalclient/spaceship
+github.com/teamlapse/go-xcode/v2/autocodesign/devportalclient/time
+github.com/teamlapse/go-xcode/v2/autocodesign/keychain
+github.com/teamlapse/go-xcode/v2/autocodesign/localcodesignasset
+github.com/teamlapse/go-xcode/v2/autocodesign/profiledownloader
+github.com/teamlapse/go-xcode/v2/autocodesign/projectmanager
+github.com/teamlapse/go-xcode/v2/codesign
+github.com/teamlapse/go-xcode/v2/xcarchive
 # github.com/davecgh/go-spew v1.1.1
 ## explicit
 github.com/davecgh/go-spew/spew

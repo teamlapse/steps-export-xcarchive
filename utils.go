@@ -12,11 +12,11 @@ import (
 
 	"github.com/bitrise-io/go-utils/log"
 	"github.com/bitrise-io/go-utils/pathutil"
-	"github.com/bitrise-io/go-xcode/certificateutil"
-	"github.com/bitrise-io/go-xcode/export"
-	"github.com/bitrise-io/go-xcode/exportoptions"
-	"github.com/bitrise-io/go-xcode/profileutil"
-	"github.com/bitrise-io/go-xcode/v2/xcarchive"
+	"github.com/teamlapse/go-xcode/certificateutil"
+	"github.com/teamlapse/go-xcode/export"
+	"github.com/teamlapse/go-xcode/exportoptions"
+	"github.com/teamlapse/go-xcode/profileutil"
+	"github.com/teamlapse/go-xcode/v2/xcarchive"
 )
 
 const (
